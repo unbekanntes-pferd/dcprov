@@ -1,0 +1,16 @@
+[package]
+name = "dcprov"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+reqwest = {version="0.11.4", features=["json"]}
+serde = {version="1.0.130", features=["derive"]}
+serde_json = "1.0.72"
+tokio = {version = "1.13.0", features = ["full"]}
+url = "2.2.2"
+chrono = {version="0.4.19", features = ["serde"]}
+structopt = "0.3.25"
+keytar = "0.1.6"
