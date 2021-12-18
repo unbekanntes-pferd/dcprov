@@ -1,7 +1,7 @@
 mod cmd;
 mod credentials;
 mod provisioning;
-use cmd::UpdateType;
+use cmd::{UpdateType, PrintType};
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -9,18 +9,16 @@ use structopt::StructOpt;
 enum DCProv {
     List {
         url: String,
-
-        #[structopt(short)]
+        #[structopt(short, long)]
         filter: Option<String>,
-
-        #[structopt(short)]
+        #[structopt(short, long)]
         sort: Option<String>,
-
-        #[structopt(short)]
+        #[structopt(short, long)]
         offset: Option<i64>,
-
-        #[structopt(short)]
+        #[structopt(short, long)]
         limit: Option<i64>,
+        #[structopt(long)]
+        csv: bool,
     },
 
     Config {
@@ -38,6 +36,8 @@ enum DCProv {
     Get {
         url: String,
         id: u32,
+        #[structopt(long)]
+        csv: bool,
     },
 
     Update {
@@ -86,9 +86,14 @@ async fn main() {
             sort,
             offset,
             limit,
+            csv
         } => {
             let provider = cmd::init_provisioning(url).await;
-            cmd::list_customers(provider, filter, sort, offset, limit).await
+            let print_type = match csv {
+                true => PrintType::Csv,
+                false => PrintType::Pretty
+            };
+            cmd::list_customers(provider, filter, sort, offset, limit, print_type).await
         }
 
         DCProv::Config { url, cmd } => match cmd {
@@ -116,9 +121,13 @@ async fn main() {
             cmd::create_customer(provider, new_customer).await;
         }
 
-        DCProv::Get { url, id } => {
+        DCProv::Get { url, id, csv} => {
             let provider = cmd::init_provisioning(url).await;
-            cmd::get_customer(provider, id).await;
+            let print_type = match csv {
+                true => PrintType::Csv,
+                false => PrintType::Pretty
+            };
+            cmd::get_customer(provider, id, print_type).await;
         }
 
         DCProv::Update { url, id, cmd } => {

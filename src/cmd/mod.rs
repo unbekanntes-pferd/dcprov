@@ -6,10 +6,16 @@ use crate::provisioning::{
 };
 use std::fs;
 
+const CSV_HEADER: &str = "companyName,contractType,userUsed,userMax,quotaUsed,quotaMax,id,createdAt";
 pub enum UpdateType {
     CompanyName(String),
     QuotaMax(i64),
     UserMax(i64),
+}
+#[derive(Clone, Copy)]
+pub enum PrintType {
+    Pretty,
+    Csv
 }
 
 pub async fn init_provisioning(url: String) -> DRACOONProvisioning {
@@ -74,12 +80,29 @@ pub async fn init_provisioning(url: String) -> DRACOONProvisioning {
     provider
 }
 
+fn customer_to_string(customer: Customer, print_type: PrintType) -> String {
+
+    match print_type {
+        PrintType::Csv => {
+            let cus_line = format!("{},{},{},{},{},{},{},{}\n", customer.company_name, customer.customer_contract_type, customer.user_used, customer.user_max, customer.quota_used, customer.quota_max, customer.id, customer.created_at);
+            cus_line
+        },
+        PrintType::Pretty => {
+
+            let cus_line = format!("company: {} | contract: {} | users used: {} | users max: {} | quota used: {} | quota max: {} | id: {} | created_at: {}", customer.company_name, customer.customer_contract_type, customer.user_used, customer.user_max, customer.quota_used, customer.quota_max, customer.id, customer.created_at);
+            cus_line
+        }
+    }
+
+}
+
 pub async fn list_customers(
     provider: DRACOONProvisioning,
     filter: Option<String>,
     sort: Option<String>,
     offset: Option<i64>,
     limit: Option<i64>,
+    print_type: PrintType,
 ) -> () {
     let customer_res: Option<GetCustomersResponse>;
 
@@ -97,18 +120,27 @@ pub async fn list_customers(
     };
 
     if let Some(customer_res) = customer_res {
-        println!(
-            "total customers: {} | offset: {} | limit: {}",
-            customer_res.range.total, customer_res.range.offset, customer_res.range.limit
-        );
+
+        match print_type {
+            PrintType::Csv => {
+                println!("{}", CSV_HEADER);
+            },
+            PrintType::Pretty => {
+                println!(
+                    "total customers: {} | offset: {} | limit: {}",
+                    customer_res.range.total, customer_res.range.offset, customer_res.range.limit
+                );
+            }
+        };
+
         for customer in customer_res.items {
-            let cus_line = format!("company: {} | contract: {} | users used: {} | users max: {} | quota used: {} | quota max: {} | id: {} | created_at: {}", customer.company_name, customer.customer_contract_type, customer.user_used, customer.user_max, customer.quota_used, customer.quota_max, customer.id, customer.created_at);
-            println!("{}", cus_line)
+            let cus_line = customer_to_string(customer, print_type);
+            println!("{}", cus_line);
         }
     };
 }
 
-pub async fn get_customer(provider: DRACOONProvisioning, id: u32) -> () {
+pub async fn get_customer(provider: DRACOONProvisioning, id: u32, print_type: PrintType) -> () {
     let customer: Option<Customer>;
 
     match provider.get_customer(id.into(), None).await {
@@ -122,8 +154,9 @@ pub async fn get_customer(provider: DRACOONProvisioning, id: u32) -> () {
     };
 
     if let Some(customer) = customer {
-        let cus_line = format!("company: {} | contract: {} | users used: {} | users max: {} | quota used: {} | quota max: {} | id: {} | created_at: {}", customer.company_name, customer.customer_contract_type, customer.user_used, customer.user_max, customer.quota_used, customer.quota_max, customer.id, customer.created_at);
-        println!("{}", cus_line)
+
+        let cus_line = customer_to_string(customer, print_type);
+        println!("{}", cus_line);
     };
 }
 
