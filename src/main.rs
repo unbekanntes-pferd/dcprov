@@ -24,11 +24,13 @@ enum DCProv {
     },
 
     Config {
+        url: String,
         #[structopt(subcommand)]
         cmd: ConfigCommand,
     },
 
     Create {
+        url: String,
         #[structopt(subcommand)]
         cmd: CreateCommand,
     },
@@ -53,16 +55,16 @@ enum DCProv {
 
 #[derive(StructOpt)]
 enum ConfigCommand {
-    Set { url: String, token: String },
-    Get { url: String },
-    Delete { url: String },
+    Set { token: String },
+    Get,
+    Delete,
 }
 
 #[derive(StructOpt)]
 #[structopt(rename_all = "kebab-case")]
 enum CreateCommand {
-    FromFile { url: String, path: String },
-    Prompt { url: String },
+    FromFile { path: String },
+    Prompt,
 }
 
 #[derive(StructOpt)]
@@ -89,33 +91,30 @@ async fn main() {
             cmd::list_customers(provider, filter, sort, offset, limit).await
         }
 
-        DCProv::Config { cmd } => match cmd {
-            ConfigCommand::Set { url, token } => match credentials::set_dracoon_env(&url, &token) {
+        DCProv::Config { url, cmd } => match cmd {
+            ConfigCommand::Set { token } => match credentials::set_dracoon_env(&url, &token) {
                 true => println!("Stored credentials for {}", url),
                 false => println!("Error storing credentials"),
             },
-            ConfigCommand::Get { url } => match credentials::get_dracoon_env(&url) {
+            ConfigCommand::Get => match credentials::get_dracoon_env(&url) {
                 Ok(token) => println!("Stored token for {} is {}", url, token),
                 Err(e) => println!("An error ocurred: account not found {} ({:?})", url, e),
             },
-            ConfigCommand::Delete { url } => match credentials::delete_dracoon_env(&url) {
+            ConfigCommand::Delete => match credentials::delete_dracoon_env(&url) {
                 true => println!("Deleted credentials for {}", url),
                 false => println!("Error deleting credentials: account not found for {}", url),
             },
         },
 
-        DCProv::Create { cmd } => match cmd {
-            CreateCommand::FromFile { url, path } => {
-                let provider = cmd::init_provisioning(url).await;
-                let new_customer = cmd::parse_customer_json_from_file(&path);
-                cmd::create_customer(provider, new_customer).await;
-            }
-            CreateCommand::Prompt { url } => {
-                let provider = cmd::init_provisioning(url).await;
-                let new_customer = cmd::prompt_new_customer();
-                cmd::create_customer(provider, new_customer).await;
-            }
-        },
+        DCProv::Create { url, cmd } => {
+            let provider = cmd::init_provisioning(url).await;
+            let new_customer = match cmd {
+                CreateCommand::FromFile { path } => cmd::parse_customer_json_from_file(&path),
+
+                CreateCommand::Prompt => cmd::prompt_new_customer(),
+            };
+            cmd::create_customer(provider, new_customer).await;
+        }
 
         DCProv::Get { url, id } => {
             let provider = cmd::init_provisioning(url).await;
@@ -126,7 +125,9 @@ async fn main() {
             let provider = cmd::init_provisioning(url).await;
 
             let update_type = match cmd {
-                UpdateCommand::CompanyName { company_name } => UpdateType::CompanyName(company_name),
+                UpdateCommand::CompanyName { company_name } => {
+                    UpdateType::CompanyName(company_name)
+                }
                 UpdateCommand::QuotaMax { quota_max } => UpdateType::QuotaMax(quota_max),
                 UpdateCommand::UserMax { user_max } => UpdateType::UserMax(user_max),
             };
