@@ -68,7 +68,20 @@ You can pass any API parameters like
 To do so, use either the short or long version, example for a filter:
 
 ```bash
+# short version for filter 
 ./dcprov list https://dracoon.team -f companyName:cn:DRACOON
+```
+
+```bash
+# long version for sort (sorts by company name in alphabetical order)
+./dcprov list https://dracoon.team --sort companyName:asc
+```
+By default, the output is "pretty printed" to stdout.
+If required, the output can be formatted as CSV by passing the csv flag:
+
+```bash
+# example exporting the output in csv format to a file
+./dcprov list https://dracoon.team --csv > ./customers.csv
 ```
 
 #### Get a single customer
@@ -90,13 +103,13 @@ To create a new customer, there are two supported ways:
 To create a customer from a file, use the following command:
 
 ```bash
-./dcprov create from-file https://dracoon.team ./test.json
+./dcprov create https://dracoon.team from-file ./test.json
 ```
 
 To create a customer from the prompt, use the following command:
 
 ```bash
-./dcprov create prompt https://dracoon.team
+./dcprov create https://dracoon.team prompt
 ```
 
 #### Update a customer
@@ -139,7 +152,7 @@ In order to perform any requests, you will need to enter the X-SDS-Service-Token
 To store a token, use the set command:
 
 ```bash
-./dcprov config set https://dracoon.team your-very-secret-token
+./dcprov config https://dracoon.team set your-very-secret-token
 ```
 The token will be stored securely based on your OS (keytar bindings).
 
@@ -147,7 +160,7 @@ The token will be stored securely based on your OS (keytar bindings).
 To print a token to screen, use the get command:
 
 ```bash
-./dcprov config get https://dracoon.team
+./dcprov config https://dracoon.team get
 ```
 The token will be fetched from the secure storage and printed to screen – the command can be used as well to check, if a token is stored for a given domain.
 
@@ -155,7 +168,7 @@ The token will be fetched from the secure storage and printed to screen – the 
 To delete, use the delete command:
 
 ```bash
-./dcprov config delete https://dracoon.team
+./dcprov config https://dracoon.team delete
 ```
 The token will be removed from the secure storage.
 

@@ -84,7 +84,7 @@ fn customer_to_string(customer: Customer, print_type: PrintType) -> String {
 
     match print_type {
         PrintType::Csv => {
-            let cus_line = format!("{},{},{},{},{},{},{},{}\n", customer.company_name, customer.customer_contract_type, customer.user_used, customer.user_max, customer.quota_used, customer.quota_max, customer.id, customer.created_at);
+            let cus_line = format!("{},{},{},{},{},{},{},{}", customer.company_name, customer.customer_contract_type, customer.user_used, customer.user_max, customer.quota_used, customer.quota_max, customer.id, customer.created_at);
             cus_line
         },
         PrintType::Pretty => {
