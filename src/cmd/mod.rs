@@ -1,24 +1,60 @@
 use crate::credentials::{get_dracoon_env, set_dracoon_env};
 use crate::provisioning::{
-    self, Customer, DRACOONProvisioning, DRACOONProvisioningError, FirstAdminUser,
-    GetCustomersResponse, NewCustomerRequest, NewCustomerResponse, UpdateCustomerRequest,
-    UpdateCustomerResponse, UserAuthData,
+    self, Customer, DRACOONProvisioning, FirstAdminUser, GetCustomersResponse, NewCustomerRequest,
+    NewCustomerResponse, UpdateCustomerRequest, UpdateCustomerResponse, DRACOONProvisioningError, DRACOONErrorResponse
 };
 use colored::*;
 use std::fs;
 
+// header for CSV output (list customers)
 const CUSTOMER_CSV_HEADER: &str =
     "companyName,contractType,userUsed,userMax,quotaUsed,quotaMax,id,createdAt";
 
+// supported update types
 pub enum UpdateType {
     CompanyName(String),
     QuotaMax(i64),
     UserMax(i64),
 }
+
+// supported customer print output
 #[derive(Clone, Copy)]
 pub enum PrintType {
     Pretty,
     Csv,
+}
+
+// print HTTP errors 
+fn print_dracoon_error(err: DRACOONErrorResponse) -> () {
+
+    println!("{} {} {}", "Error".white().on_red(), err.code, err.message);
+    match err.debug_info {
+        Some(debug_info) => {
+            println!("{} {}", "Error details".white().on_red(), debug_info);
+        },
+        None => ()
+    };
+
+}
+
+// process provisioning API errors (print if error response present)
+fn handle_dracoon_errors(err: DRACOONProvisioningError) -> () {
+    match err {
+        DRACOONProvisioningError::Conflict(err) => print_dracoon_error(err),
+        DRACOONProvisioningError::BadRequest(err) => print_dracoon_error(err),
+        DRACOONProvisioningError::Forbidden(err) => print_dracoon_error(err),
+        DRACOONProvisioningError::PaymentRequired(err) => print_dracoon_error(err),
+        DRACOONProvisioningError::Undocumented(err) => print_dracoon_error(err),
+        DRACOONProvisioningError::NotFound(err) => print_dracoon_error(err),
+        DRACOONProvisioningError::NotAcceptable(err) => print_dracoon_error(err),
+        DRACOONProvisioningError::Unauthorized(err) => {
+            if let Some(err) = err {
+                print_dracoon_error(err)
+            }
+        },
+        _ => println!("{} {}", "Error".white().on_red(), "Uncaught error."),
+
+    }
 }
 
 pub async fn init_provisioning(url: String) -> DRACOONProvisioning {
@@ -28,7 +64,7 @@ pub async fn init_provisioning(url: String) -> DRACOONProvisioning {
             from_creds = true;
             pwd
         }
-        Err(e) => {
+        Err(_) => {
             println!("Please enter X-SDS-Service-Token: ");
             let mut service_token = String::new();
             std::io::stdin()
@@ -126,13 +162,12 @@ pub async fn list_customers(
     {
         Ok(res) => customer_res = Some(res),
         Err(e) => {
-            customer_res = None;
             println!(
                 "{} {}",
                 "Error".white().on_red(),
                 "Could not list customers."
             );
-            println!("{:?}", e);
+            handle_dracoon_errors(e);
             std::process::exit(1)
         }
     };
@@ -163,13 +198,12 @@ pub async fn get_customer(provider: DRACOONProvisioning, id: u32, print_type: Pr
     match provider.get_customer(id.into(), None).await {
         Ok(res) => customer = Some(res),
         Err(e) => {
-            customer = None;
             println!(
                 "{} {}",
                 "Error".white().on_red(),
                 "Could not get customer info."
             );
-            println!("{:?}", e);
+            handle_dracoon_errors(e);
             std::process::exit(1)
         }
     };
@@ -226,13 +260,12 @@ pub async fn update_customer(
     match provider.update_customer(id.into(), update_customer).await {
         Ok(res) => customer = Some(res),
         Err(e) => {
-            customer = None;
             println!(
                 "{} {}",
                 "Error".white().on_red(),
                 "Could not update customer."
             );
-            println!("{:?}", e);
+            handle_dracoon_errors(e);
             std::process::exit(1);
         }
     };
@@ -258,8 +291,6 @@ pub async fn update_customer(
 }
 
 pub async fn delete_customer(provider: DRACOONProvisioning, id: u32) -> () {
-    let customer: Result<(), DRACOONProvisioningError>;
-
     match provider.delete_customer(id.into()).await {
         Ok(_) => {
             println!(
@@ -276,7 +307,7 @@ pub async fn delete_customer(provider: DRACOONProvisioning, id: u32) -> () {
                 "Error".white().on_red(),
                 "Could not delete customer."
             );
-            println!("{:?}", e);
+            handle_dracoon_errors(e);
             std::process::exit(1);
         }
     };
@@ -394,7 +425,7 @@ pub fn prompt_new_customer() -> NewCustomerRequest {
                     break;
                 }
             }
-            Err(e) => {
+            Err(_) => {
                 println!(
                     "{} {}",
                     "Error".white().on_red(),
@@ -419,7 +450,7 @@ pub fn prompt_new_customer() -> NewCustomerRequest {
                     break;
                 }
             }
-            Err(e) => {
+            Err(_) => {
                 println!(
                     "{} {}",
                     "Error".white().on_red(),
@@ -429,38 +460,28 @@ pub fn prompt_new_customer() -> NewCustomerRequest {
         };
     }
 
-    let local_auth = UserAuthData {
-        method: "basic".to_string(),
-        must_change_password: Some(true),
-        login: None,
-        ad_config_id: None,
-        oid_config_id: None,
-        password: None,
-    };
 
-    let first_admin = FirstAdminUser {
-        first_name: first_name.trim().to_string(),
-        last_name: last_name.trim().to_string(),
-        user_name: Some(username.trim().to_string()),
-        auth_data: Some(local_auth),
-        receiver_language: None,
-        notify_user: Some(true),
-        email: Some(email.trim().to_string()),
-        phone: None,
-    };
+    let first_admin = FirstAdminUser::new_local(
+        first_name.trim().to_string(),
+        last_name.trim().to_string(),
+        Some(username.trim().to_string()),
+        email.trim().to_string(),
+        None,
+    );
 
-    NewCustomerRequest {
-        customer_contract_type: "pay".to_string(),
-        quota_max: final_quota_max,
-        user_max: final_user_max,
-        first_admin_user: first_admin,
-        company_name: Some(company_name.trim().to_string()),
-        trial_days: None,
-        is_locked: None,
-        customer_attributes: None,
-        provider_customer_id: None,
-        webhooks_max: None,
-    }
+    NewCustomerRequest::new(
+        "pay".to_string(),
+        final_quota_max,
+        final_user_max,
+        first_admin,
+        Some(company_name.trim().to_string()),
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+
 }
 
 pub async fn create_customer(
@@ -472,13 +493,12 @@ pub async fn create_customer(
     match provider.create_customer(new_customer).await {
         Ok(res) => customer_res = Some(res),
         Err(e) => {
-            customer_res = None;
             println!(
                 "{} {}",
                 "Error".white().on_red(),
                 "Could not create customer."
             );
-            println!("{:?}", e);
+            handle_dracoon_errors(e);
             std::process::exit(1)
         }
     };

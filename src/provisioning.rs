@@ -258,9 +258,9 @@ pub struct UpdateCustomerRequest {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DRACOONErrorResponse {
-    code: i64,
-    message: String,
-    debug_info: Option<String>,
+    pub code: i64,
+    pub message: String,
+    pub debug_info: Option<String>,
     error_code: Option<i64>,
 }
 
@@ -277,7 +277,6 @@ pub enum DRACOONProvisioningError {
     Conflict(DRACOONErrorResponse),
     Undocumented(DRACOONErrorResponse),
     InvalidAccount,
-    UnsavedCredentials,
 }
 
 impl From<reqwest::Error> for DRACOONProvisioningError {
@@ -454,9 +453,13 @@ impl DRACOONProvisioning {
         id: i64,
         include_attributes: Option<bool>,
     ) -> Result<Customer, DRACOONProvisioningError> {
-        let mut api_url = format!(
-            "{}{}{}/{}",
-            self.base_url, DRACOON_PROVISIONING_API, CUSTOMERS, id
+        let attrib = match include_attributes {
+            Some(include_attributes) => include_attributes,
+            None => false
+        };
+        let api_url = format!(
+            "{}{}{}/{}/?include_attributes={}",
+            self.base_url, DRACOON_PROVISIONING_API, CUSTOMERS, id, attrib.to_string()
         );
 
         let api_url = Url::parse(&api_url)?;
@@ -546,11 +549,6 @@ impl DRACOONProvisioning {
                     response.json::<DRACOONErrorResponse>().await?,
                 ))
             }
-            StatusCode::CONFLICT => {
-                return Err(DRACOONProvisioningError::Conflict(
-                    response.json::<DRACOONErrorResponse>().await?,
-                ))
-            }
             _ => {
                 return Err(DRACOONProvisioningError::Undocumented(
                     response.json::<DRACOONErrorResponse>().await?,
@@ -560,7 +558,7 @@ impl DRACOONProvisioning {
     }
 
     pub async fn delete_customer(&self, id: i64) -> Result<(), DRACOONProvisioningError> {
-        let mut api_url = format!(
+        let api_url = format!(
             "{}{}{}/{}",
             self.base_url, DRACOON_PROVISIONING_API, CUSTOMERS, id
         );
