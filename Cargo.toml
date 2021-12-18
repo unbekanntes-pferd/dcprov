@@ -14,3 +14,4 @@ url = "2.2.2"
 chrono = {version="0.4.19", features = ["serde"]}
 structopt = "0.3.25"
 keytar = "0.1.6"
+colored = "2.0.0"

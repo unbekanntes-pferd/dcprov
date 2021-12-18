@@ -1,6 +1,6 @@
 
 
-# DCPROV – DRACOON Provisioning CLI
+# dcprov – DRACOON Provisioning CLI
 
 ## What is this?
 

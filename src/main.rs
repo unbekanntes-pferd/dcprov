@@ -1,8 +1,10 @@
 mod cmd;
 mod credentials;
 mod provisioning;
-use cmd::{UpdateType, PrintType};
+use cmd::{PrintType, UpdateType};
 use structopt::StructOpt;
+
+use colored::*;
 
 #[derive(StructOpt)]
 #[structopt(rename_all = "kebab-case")]
@@ -86,28 +88,56 @@ async fn main() {
             sort,
             offset,
             limit,
-            csv
+            csv,
         } => {
             let provider = cmd::init_provisioning(url).await;
             let print_type = match csv {
                 true => PrintType::Csv,
-                false => PrintType::Pretty
+                false => PrintType::Pretty,
             };
             cmd::list_customers(provider, filter, sort, offset, limit, print_type).await
         }
 
         DCProv::Config { url, cmd } => match cmd {
             ConfigCommand::Set { token } => match credentials::set_dracoon_env(&url, &token) {
-                true => println!("Stored credentials for {}", url),
-                false => println!("Error storing credentials"),
+                true => println!("{}{}{}", "Success ".green(), "Credentials saved for ", url),
+                false => println!(
+                    "{} {}{}",
+                    "Error".white().on_red(),
+                    "Could not save credentials for ",
+                    url
+                ),
             },
             ConfigCommand::Get => match credentials::get_dracoon_env(&url) {
-                Ok(token) => println!("Stored token for {} is {}", url, token),
-                Err(e) => println!("An error ocurred: account not found {} ({:?})", url, e),
+                Ok(token) => println!(
+                    "{}{}{}{}{}",
+                    "Success ".green(),
+                    "Credentials for ",
+                    url,
+                    ": ",
+                    token
+                ),
+                Err(e) => println!(
+                    "{} {}{}\n{:?}",
+                    "Error".white().on_red(),
+                    "Could not get credentials – account not found for ",
+                    url,
+                    e
+                ),
             },
             ConfigCommand::Delete => match credentials::delete_dracoon_env(&url) {
-                true => println!("Deleted credentials for {}", url),
-                false => println!("Error deleting credentials: account not found for {}", url),
+                true => println!(
+                    "{}{}{}",
+                    "Success ".green(),
+                    "Credentials deleted for ",
+                    url
+                ),
+                false => println!(
+                    "{} {}{}",
+                    "Error".white().on_red(),
+                    "Could not delete credentials – account not found for ",
+                    url
+                ),
             },
         },
 
@@ -121,11 +151,11 @@ async fn main() {
             cmd::create_customer(provider, new_customer).await;
         }
 
-        DCProv::Get { url, id, csv} => {
+        DCProv::Get { url, id, csv } => {
             let provider = cmd::init_provisioning(url).await;
             let print_type = match csv {
                 true => PrintType::Csv,
-                false => PrintType::Pretty
+                false => PrintType::Pretty,
             };
             cmd::get_customer(provider, id, print_type).await;
         }

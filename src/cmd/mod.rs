@@ -4,9 +4,12 @@ use crate::provisioning::{
     GetCustomersResponse, NewCustomerRequest, NewCustomerResponse, UpdateCustomerRequest,
     UpdateCustomerResponse, UserAuthData,
 };
+use colored::*;
 use std::fs;
 
-const CSV_HEADER: &str = "companyName,contractType,userUsed,userMax,quotaUsed,quotaMax,id,createdAt";
+const CUSTOMER_CSV_HEADER: &str =
+    "companyName,contractType,userUsed,userMax,quotaUsed,quotaMax,id,createdAt";
+
 pub enum UpdateType {
     CompanyName(String),
     QuotaMax(i64),
@@ -15,7 +18,7 @@ pub enum UpdateType {
 #[derive(Clone, Copy)]
 pub enum PrintType {
     Pretty,
-    Csv
+    Csv,
 }
 
 pub async fn init_provisioning(url: String) -> DRACOONProvisioning {
@@ -30,7 +33,7 @@ pub async fn init_provisioning(url: String) -> DRACOONProvisioning {
             let mut service_token = String::new();
             std::io::stdin()
                 .read_line(&mut service_token)
-                .expect("Error parsing user input (service token).");
+                .expect(&"Error parsing user input (service token).");
 
             service_token
         }
@@ -46,7 +49,11 @@ pub async fn init_provisioning(url: String) -> DRACOONProvisioning {
     {
         Ok(prov) => provider = prov,
         Err(err) => {
-            println!("An error ocurred – could not create provider");
+            println!(
+                "{} {}",
+                "Error".white().on_red(),
+                "Could not create provider."
+            );
             println!("{:?}", err);
             std::process::exit(1)
         }
@@ -81,19 +88,26 @@ pub async fn init_provisioning(url: String) -> DRACOONProvisioning {
 }
 
 fn customer_to_string(customer: Customer, print_type: PrintType) -> String {
-
     match print_type {
         PrintType::Csv => {
-            let cus_line = format!("{},{},{},{},{},{},{},{}", customer.company_name, customer.customer_contract_type, customer.user_used, customer.user_max, customer.quota_used, customer.quota_max, customer.id, customer.created_at);
+            let cus_line = format!(
+                "{},{},{},{},{},{},{},{}",
+                customer.company_name,
+                customer.customer_contract_type,
+                customer.user_used,
+                customer.user_max,
+                customer.quota_used,
+                customer.quota_max,
+                customer.id,
+                customer.created_at
+            );
             cus_line
-        },
+        }
         PrintType::Pretty => {
-
             let cus_line = format!("company: {} | contract: {} | users used: {} | users max: {} | quota used: {} | quota max: {} | id: {} | created_at: {}", customer.company_name, customer.customer_contract_type, customer.user_used, customer.user_max, customer.quota_used, customer.quota_max, customer.id, customer.created_at);
             cus_line
         }
     }
-
 }
 
 pub async fn list_customers(
@@ -113,18 +127,21 @@ pub async fn list_customers(
         Ok(res) => customer_res = Some(res),
         Err(e) => {
             customer_res = None;
-            println!("Could not fetch customers: \n");
+            println!(
+                "{} {}",
+                "Error".white().on_red(),
+                "Could not list customers."
+            );
             println!("{:?}", e);
             std::process::exit(1)
         }
     };
 
     if let Some(customer_res) = customer_res {
-
         match print_type {
             PrintType::Csv => {
-                println!("{}", CSV_HEADER);
-            },
+                println!("{}", CUSTOMER_CSV_HEADER);
+            }
             PrintType::Pretty => {
                 println!(
                     "total customers: {} | offset: {} | limit: {}",
@@ -147,14 +164,17 @@ pub async fn get_customer(provider: DRACOONProvisioning, id: u32, print_type: Pr
         Ok(res) => customer = Some(res),
         Err(e) => {
             customer = None;
-            println!("Could not fetch customers: \n");
+            println!(
+                "{} {}",
+                "Error".white().on_red(),
+                "Could not get customer info."
+            );
             println!("{:?}", e);
             std::process::exit(1)
         }
     };
 
     if let Some(customer) = customer {
-
         let cus_line = customer_to_string(customer, print_type);
         println!("{}", cus_line);
     };
@@ -207,14 +227,23 @@ pub async fn update_customer(
         Ok(res) => customer = Some(res),
         Err(e) => {
             customer = None;
-            println!("Could not update customer: \n");
+            println!(
+                "{} {}",
+                "Error".white().on_red(),
+                "Could not update customer."
+            );
             println!("{:?}", e);
             std::process::exit(1);
         }
     };
 
     if let Some(customer) = customer {
-        println!("Updated customer successfully: \n");
+        println!(
+            "{}{}{}",
+            "Success ".green(),
+            "Updated customer with id ",
+            id
+        );
 
         let cus_line = format!(
             "company: {} | contract: {} | users max: {} | quota max: {} | id: {}",
@@ -232,12 +261,21 @@ pub async fn delete_customer(provider: DRACOONProvisioning, id: u32) -> () {
     let customer: Result<(), DRACOONProvisioningError>;
 
     match provider.delete_customer(id.into()).await {
-        Ok(res) => {
-            println!("Successfully deleted customer with id {}", id);
+        Ok(_) => {
+            println!(
+                "{}{}{}",
+                "Success ".green(),
+                "Deleted customer with id ",
+                id
+            );
             std::process::exit(0)
         }
         Err(e) => {
-            println!("Could not delete customer with id: {}\n", id);
+            println!(
+                "{} {}",
+                "Error".white().on_red(),
+                "Could not delete customer."
+            );
             println!("{:?}", e);
             std::process::exit(1);
         }
@@ -251,9 +289,12 @@ pub fn parse_customer_json_from_file(path: &str) -> NewCustomerRequest {
         Ok(res) => res,
         Err(e) => {
             println!(
-                "Error opening specified file from path '{}' \n {:?}",
-                path, e
+                "{} {}{}",
+                "Error".white().on_red(),
+                "Could not open file from path ",
+                path
             );
+            println!("{:?}", e);
             std::process::exit(1)
         }
     };
@@ -262,9 +303,12 @@ pub fn parse_customer_json_from_file(path: &str) -> NewCustomerRequest {
         Ok(customer) => customer,
         Err(e) => {
             println!(
-                "Error parsing JSON (invalid format?) from file '{}' \n {:?}",
-                path, e
+                "{} {}{}",
+                "Error".white().on_red(),
+                "Could not parse customer from file ",
+                path
             );
+            println!("{:?}", e);
             std::process::exit(1)
         }
     };
@@ -279,7 +323,7 @@ pub fn prompt_new_customer() -> NewCustomerRequest {
     let final_user_max: i64;
 
     // first admin user
-    println!("Step 1: Enter first admin user");
+    println!("{}", "Step 1: Enter first admin user".white().on_blue());
 
     // full name
     loop {
@@ -298,7 +342,11 @@ pub fn prompt_new_customer() -> NewCustomerRequest {
                 break;
             }
             _ => {
-                println!("Please use correct format: firstname lastname.");
+                println!(
+                    "{} {}",
+                    "Error".white().on_red(),
+                    "Please use correct format (firstname lastname)."
+                );
             }
         };
     }
@@ -323,7 +371,7 @@ pub fn prompt_new_customer() -> NewCustomerRequest {
     };
 
     // customer
-    println!("Step 2: Configure customer");
+    println!("{}", "Step 2: Configure customer".white().on_blue());
 
     println!("Please enter company name: ");
     let mut company_name = String::new();
@@ -347,7 +395,11 @@ pub fn prompt_new_customer() -> NewCustomerRequest {
                 }
             }
             Err(e) => {
-                println!("Please enter a valid positive number.")
+                println!(
+                    "{} {}",
+                    "Error".white().on_red(),
+                    "Please enter a valid positive number."
+                );
             }
         };
     }
@@ -368,7 +420,11 @@ pub fn prompt_new_customer() -> NewCustomerRequest {
                 }
             }
             Err(e) => {
-                println!("Please enter a valid positive number.")
+                println!(
+                    "{} {}",
+                    "Error".white().on_red(),
+                    "Please enter a valid positive number."
+                );
             }
         };
     }
@@ -417,16 +473,24 @@ pub async fn create_customer(
         Ok(res) => customer_res = Some(res),
         Err(e) => {
             customer_res = None;
-            println!("Could not create customer: \n");
+            println!(
+                "{} {}",
+                "Error".white().on_red(),
+                "Could not create customer."
+            );
             println!("{:?}", e);
             std::process::exit(1)
         }
     };
 
     if let Some(customer_res) = customer_res {
+        println!("{}{}", "Success ".green(), "Customer creeated.");
         println!(
-            "Created customer: {} | user max: {} | quota max: {}",
-            customer_res.company_name, customer_res.user_max, customer_res.quota_max
+            "Company name: {} | user max: {} | quota max: {} | id: {}",
+            customer_res.company_name,
+            customer_res.user_max,
+            customer_res.quota_max,
+            customer_res.id
         );
     };
 }
