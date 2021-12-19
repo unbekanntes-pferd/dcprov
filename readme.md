@@ -41,6 +41,9 @@ The tool is fairly simple to use via commandline and comes with the following co
 * update – update a single customer by id
 * delete – delete a single customer by id
 * config – configure (set, get or remove) token (secure storage: keytar bindings)
+* get-users - get all users for a customer by id
+* get-attributes - get all attributes for a customer by id
+* set-attributes - set attribute(s) for a customer by id
 
 #### List all customers
 
