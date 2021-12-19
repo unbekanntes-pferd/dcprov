@@ -22,9 +22,7 @@ The provisioning API allows to create customers within a tenant.
 
 To get going, either get a compiled binary for your OS or compile it from source.
 1. Compiled binaries:
-- Linux x86: 
-- MacOS x86: 
-- Windows x86: 
+[dcprov eleases](https://github.com/unbekanntes-pferd/dcprov/releases)
 
 2. Compile from source:
 To compile from source, git clone this repo and run
