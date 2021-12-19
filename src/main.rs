@@ -22,108 +22,142 @@ where
 }
 
 #[derive(StructOpt)]
-#[structopt(rename_all = "kebab-case")]
+#[structopt(rename_all = "kebab-case", about="DRACOON Provisioning API CLI tool (dcprov)")]
 enum DCProv {
+    /// List all available customers for specific DRACOON url
     List {
+        /// DRACOON url
         url: String,
-        #[structopt(short, long)]
+        #[structopt(short, long, help="filter option – see API docs for details")]
         filter: Option<String>,
-        #[structopt(short, long)]
+        #[structopt(short, long, help="sort option – see API docs for details")]
         sort: Option<String>,
-        #[structopt(short, long)]
+        #[structopt(short, long, help="offset – max. 500 items returned, see API docs for details")]
         offset: Option<i64>,
-        #[structopt(short, long)]
+        #[structopt(short, long, help="limit – limits max. returned items, see API docs for details")]
         limit: Option<i64>,
-        #[structopt(long)]
+        #[structopt(long, help="csv flag – if passed, output will be comma-separated")]
         csv: bool,
     },
-
+    
+    /// Configure X-SDS-Service-Token for specific DRACOON url 
     Config {
+        /// DRACOON url
         url: String,
         #[structopt(subcommand)]
         cmd: ConfigCommand,
     },
-
+    
+    /// Create a new customer for specific DRACOON url
     Create {
+        /// DRACOON url
         url: String,
         #[structopt(subcommand)]
         cmd: CreateCommand,
     },
-
+    
+    /// Get a customer by id for specific DRACOON url
     Get {
+        /// DRACOON url
         url: String,
+        /// Customer id
         id: u32,
-        #[structopt(long)]
+        #[structopt(long, help="csv flag – if passed, output will be comma-separated")]
         csv: bool,
     },
-
+    
+    /// Update a customer by id for specific DRACOON url
     Update {
+        /// DRACOON url
         url: String,
+        /// Customer id
         id: u32,
         #[structopt(subcommand)]
         cmd: UpdateCommand,
     },
-
+    
+    /// Delete a customer by id for specific DRACOON url
     Delete {
+        /// DRACOON url
         url: String,
+        /// Customer id
         id: u32,
     },
-
+    
+    /// Get customer attributes for a customer by customer id for specific DRACOON url
     GetAttributes {
+        /// DRACOON url
         url: String,
+        /// Customer id
         id: u32,
-        #[structopt(short, long)]
+        #[structopt(short, long, help="filter option – see API docs for details")]
         filter: Option<String>,
-        #[structopt(short, long)]
+        #[structopt(short, long, help="sort option – see API docs for details")]
         sort: Option<String>,
-        #[structopt(short, long)]
+        #[structopt(short, long, help="offset – max. 500 items returned, see API docs for details")]
         offset: Option<i64>,
-        #[structopt(short, long)]
+        #[structopt(short, long, help="limit – limits max. returned items, see API docs for details")]
         limit: Option<i64>,
-        #[structopt(long)]
+        #[structopt(long, help="csv flag – if passed, output will be comma-separated")]
         csv: bool,
     },
+
+    /// Set customer attributes for a customer by customer id for specific DRACOON url
     SetAttributes {
+        /// DRACOON url
         url: String,
+        /// Customer id
         id: u32,
         #[structopt(short, parse(try_from_str = parse_key_val), number_of_values = 1)]
         attribs: Vec<(String, String)>,
     },
+
+    /// Get customer users for a customer by customer id for specific DRACOON url
     GetUsers {
+        /// DRACOON url
         url: String,
+        /// Customer id
         id: u32,
-        #[structopt(short, long)]
+        #[structopt(short, long, help="filter option – see API docs for details")]
         filter: Option<String>,
-        #[structopt(short, long)]
+        #[structopt(short, long, help="sort option – see API docs for details")]
         sort: Option<String>,
-        #[structopt(short, long)]
+        #[structopt(short, long, help="offset – max. 500 items returned, see API docs for details")]
         offset: Option<i64>,
-        #[structopt(short, long)]
+        #[structopt(short, long, help="limit – limits max. returned items, see API docs for details")]
         limit: Option<i64>,
-        #[structopt(long)]
+        #[structopt(long, help="csv flag – if passed, output will be comma-separated")]
         csv: bool,
     },
 }
 
 #[derive(StructOpt)]
 enum ConfigCommand {
+    /// Set X-SDS-Service-Token 
     Set { token: String },
+    /// Get (output) stored X-SDS-Service-Token 
     Get,
+    /// Delete stored X-SDS-Service-Token 
     Delete,
 }
 
 #[derive(StructOpt)]
 #[structopt(rename_all = "kebab-case")]
 enum CreateCommand {
+    /// Create a new customer from JSON file
     FromFile { path: String },
+    /// Create a new customer via interactive prompt
     Prompt,
 }
 
 #[derive(StructOpt)]
 #[structopt(rename_all = "kebab-case")]
 enum UpdateCommand {
+    /// Update maximum quota (in bytes!)
     QuotaMax { quota_max: i64 },
+    /// Update maximum users 
     UserMax { user_max: i64 },
+    /// Update company name
     CompanyName { company_name: String },
 }
 
