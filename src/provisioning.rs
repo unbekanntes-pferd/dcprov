@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{ DateTime, Utc};
 use reqwest::{header, Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
 use url::ParseError;
@@ -7,6 +7,8 @@ const APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PK
 const X_SDS_SERVICE_TOKEN_HEADER: &str = "X-Sds-Service-Token";
 const DRACOON_PROVISIONING_API: &str = "api/v4/provisioning/";
 const CUSTOMERS: &str = "customers";
+const ATTRIBUTES: &str = "customerAttributes";
+const USERS: &str = "users";
 
 const DEFAULT_LIMIT: i32 = 500;
 const DEFAULT_OFFSET: i32 = 0;
@@ -53,14 +55,27 @@ pub struct RangeResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct KeyValueEntry {
-    key: String,
-    value: String,
+pub struct KeyValueEntry {
+    pub key: String,
+    pub value: String,
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CustomerAttributes {
     items: Vec<KeyValueEntry>,
 }
+
+impl CustomerAttributes {
+    pub fn new() -> CustomerAttributes {
+        let items = Vec::new();
+        CustomerAttributes { items }
+    }
+
+    pub fn add_attribute(&mut self, key: String, value: String) -> () {
+        let attrib = KeyValueEntry { key, value };
+        self.items.push(attrib);
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Customer {
@@ -84,6 +99,60 @@ pub struct Customer {
 pub struct GetCustomersResponse {
     pub range: RangeResponse,
     pub items: Vec<Customer>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AttributesResponse {
+    pub range: RangeResponse,
+    pub items: Vec<KeyValueEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct Right {
+    id: i64,
+    name: String,
+    description: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct Role {
+    id: i64,
+    name: String,
+    description: String,
+    items: Option<Vec<Right>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct UserRoles {
+    items: Vec<Role>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserItem {
+    pub id: i64,
+    pub first_name: String,
+    pub last_name: String,
+    pub user_name: String,
+    pub is_locked: bool,
+    pub avatar_uuid: String,
+    pub created_at: Option<DateTime<Utc>>,
+    pub expire_at: Option<DateTime<Utc>>,
+    pub last_login_success_at: Option<DateTime<Utc>>,
+    pub is_encryption_enabled: Option<bool>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub home_room_id: Option<i64>,
+    pub user_roles: Option<UserRoles>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UserList {
+    pub range: RangeResponse,
+    pub items: Vec<UserItem>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -233,7 +302,6 @@ pub struct UpdateCustomerResponse {
     pub customer_attributes: Option<CustomerAttributes>,
     pub provider_customer_id: Option<String>,
     pub webhooks_max: Option<i64>,
-
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -265,6 +333,7 @@ pub struct DRACOONErrorResponse {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum DRACOONProvisioningError {
     RequestFailed(reqwest::Error),
     InvalidUrl(ParseError),
@@ -455,11 +524,15 @@ impl DRACOONProvisioning {
     ) -> Result<Customer, DRACOONProvisioningError> {
         let attrib = match include_attributes {
             Some(include_attributes) => include_attributes,
-            None => false
+            None => false,
         };
         let api_url = format!(
             "{}{}{}/{}/?include_attributes={}",
-            self.base_url, DRACOON_PROVISIONING_API, CUSTOMERS, id, attrib.to_string()
+            self.base_url,
+            DRACOON_PROVISIONING_API,
+            CUSTOMERS,
+            id,
+            attrib.to_string()
         );
 
         let api_url = Url::parse(&api_url)?;
@@ -601,5 +674,200 @@ impl DRACOONProvisioning {
                 ))
             }
         }
+    }
+
+    pub async fn get_customer_attributes(
+        &self,
+        id: i64,
+        filter: Option<String>,
+        sort: Option<String>,
+        offset: Option<i64>,
+        limit: Option<i64>,
+    ) -> Result<AttributesResponse, DRACOONProvisioningError> {
+        let mut api_url = format!(
+            "{}{}{}/{}/{}",
+            self.base_url, DRACOON_PROVISIONING_API, CUSTOMERS, id, ATTRIBUTES
+        );
+
+        match limit {
+            Some(limit) => api_url += format!("/?limit={}", limit).as_str(),
+            None => api_url += format!("/?limit={}", DEFAULT_LIMIT).as_str(),
+        }
+
+        match offset {
+            Some(offset) => api_url += format!("&offset={}", offset).as_str(),
+            None => api_url += format!("&offset={}", DEFAULT_OFFSET).as_str(),
+        }
+
+        match filter {
+            Some(filter) => api_url += format!("&filter={}", filter).as_str(),
+            None => (),
+        }
+
+        match sort {
+            Some(sort) => api_url += format!("&sort={}", sort).as_str(),
+            None => (),
+        }
+
+        let api_url = Url::parse(&api_url)?;
+        let response = self
+            .http
+            .get(api_url)
+            .header(X_SDS_SERVICE_TOKEN_HEADER, &self.x_sds_service_token)
+            .header(header::CONTENT_TYPE, "application/json")
+            .send()
+            .await?;
+
+        match response.status() {
+            StatusCode::OK => return Ok(response.json::<AttributesResponse>().await?),
+            StatusCode::NOT_FOUND => {
+                return Err(DRACOONProvisioningError::NotFound(
+                    response.json::<DRACOONErrorResponse>().await?,
+                ))
+            }
+            StatusCode::BAD_REQUEST => {
+                return Err(DRACOONProvisioningError::BadRequest(
+                    response.json::<DRACOONErrorResponse>().await?,
+                ))
+            }
+            StatusCode::UNAUTHORIZED => {
+                return Err(DRACOONProvisioningError::Unauthorized(Some(
+                    response.json::<DRACOONErrorResponse>().await?,
+                )))
+            }
+            StatusCode::NOT_ACCEPTABLE => {
+                return Err(DRACOONProvisioningError::NotAcceptable(
+                    response.json::<DRACOONErrorResponse>().await?,
+                ))
+            }
+            _ => {
+                return Err(DRACOONProvisioningError::Undocumented(
+                    response.json::<DRACOONErrorResponse>().await?,
+                ))
+            }
+        };
+    }
+
+    pub async fn update_customer_attributes(
+        &self,
+        id: i64,
+        attribs: CustomerAttributes,
+    ) -> Result<Customer, DRACOONProvisioningError> {
+        let api_url = format!(
+            "{}{}{}/{}/{}",
+            self.base_url, DRACOON_PROVISIONING_API, CUSTOMERS, id, ATTRIBUTES
+        );
+
+        let api_url = Url::parse(&api_url)?;
+
+        let response = self
+            .http
+            .put(api_url)
+            .header(X_SDS_SERVICE_TOKEN_HEADER, &self.x_sds_service_token)
+            .header(header::CONTENT_TYPE, "application/json")
+            .json(&attribs)
+            .send()
+            .await?;
+
+        match response.status() {
+            StatusCode::OK => return Ok(response.json::<Customer>().await?),
+            StatusCode::NOT_FOUND => {
+                return Err(DRACOONProvisioningError::NotFound(
+                    response.json::<DRACOONErrorResponse>().await?,
+                ))
+            }
+            StatusCode::BAD_REQUEST => {
+                return Err(DRACOONProvisioningError::BadRequest(
+                    response.json::<DRACOONErrorResponse>().await?,
+                ))
+            }
+            StatusCode::UNAUTHORIZED => {
+                return Err(DRACOONProvisioningError::Unauthorized(Some(
+                    response.json::<DRACOONErrorResponse>().await?,
+                )))
+            }
+            StatusCode::NOT_ACCEPTABLE => {
+                return Err(DRACOONProvisioningError::NotAcceptable(
+                    response.json::<DRACOONErrorResponse>().await?,
+                ))
+            }
+            _ => {
+                return Err(DRACOONProvisioningError::Undocumented(
+                    response.json::<DRACOONErrorResponse>().await?,
+                ))
+            }
+        };
+    }
+
+    pub async fn get_customer_users(
+        &self,
+        id: i64,
+        filter: Option<String>,
+        sort: Option<String>,
+        offset: Option<i64>,
+        limit: Option<i64>,
+    ) -> Result<UserList, DRACOONProvisioningError> {
+        let mut api_url = format!(
+            "{}{}{}/{}/{}",
+            self.base_url, DRACOON_PROVISIONING_API, CUSTOMERS, id, USERS
+        );
+
+        match limit {
+            Some(limit) => api_url += format!("/?limit={}", limit).as_str(),
+            None => api_url += format!("/?limit={}", DEFAULT_LIMIT).as_str(),
+        }
+
+        match offset {
+            Some(offset) => api_url += format!("&offset={}", offset).as_str(),
+            None => api_url += format!("&offset={}", DEFAULT_OFFSET).as_str(),
+        }
+
+        match filter {
+            Some(filter) => api_url += format!("&filter={}", filter).as_str(),
+            None => (),
+        }
+
+        match sort {
+            Some(sort) => api_url += format!("&sort={}", sort).as_str(),
+            None => (),
+        }
+
+        let api_url = Url::parse(&api_url)?;
+        let response = self
+            .http
+            .get(api_url)
+            .header(X_SDS_SERVICE_TOKEN_HEADER, &self.x_sds_service_token)
+            .header(header::CONTENT_TYPE, "application/json")
+            .send()
+            .await?;
+
+        match response.status() {
+            StatusCode::OK => return Ok(response.json::<UserList>().await?),
+            StatusCode::NOT_FOUND => {
+                return Err(DRACOONProvisioningError::NotFound(
+                    response.json::<DRACOONErrorResponse>().await?,
+                ))
+            }
+            StatusCode::BAD_REQUEST => {
+                return Err(DRACOONProvisioningError::BadRequest(
+                    response.json::<DRACOONErrorResponse>().await?,
+                ))
+            }
+            StatusCode::UNAUTHORIZED => {
+                return Err(DRACOONProvisioningError::Unauthorized(Some(
+                    response.json::<DRACOONErrorResponse>().await?,
+                )))
+            }
+            StatusCode::NOT_ACCEPTABLE => {
+                return Err(DRACOONProvisioningError::NotAcceptable(
+                    response.json::<DRACOONErrorResponse>().await?,
+                ))
+            }
+            _ => {
+                return Err(DRACOONProvisioningError::Undocumented(
+                    response.json::<DRACOONErrorResponse>().await?,
+                ))
+            }
+        };
     }
 }

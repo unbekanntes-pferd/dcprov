@@ -2,6 +2,7 @@ use keytar::{delete_password, get_password, set_password};
 
 use crate::provisioning::DRACOONProvisioningError;
 
+// service name to store 
 const SERVICE_NAME: &str = env!("CARGO_PKG_NAME");
 
 pub fn set_dracoon_env(dracoon_url: &str, service_token: &str) -> bool {

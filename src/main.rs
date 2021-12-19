@@ -1,10 +1,25 @@
 mod cmd;
 mod credentials;
 mod provisioning;
+use std::error::Error;
+
 use cmd::{PrintType, UpdateType};
 use structopt::StructOpt;
 
 use colored::*;
+
+fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn Error>>
+where
+    T: std::str::FromStr,
+    T::Err: Error + 'static,
+    U: std::str::FromStr,
+    U::Err: Error + 'static,
+{
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("invalid KEY=value: no `=` found in `{}`", s))?;
+    Ok((s[..pos].parse()?, s[pos + 1..].parse()?))
+}
 
 #[derive(StructOpt)]
 #[structopt(rename_all = "kebab-case")]
@@ -53,6 +68,41 @@ enum DCProv {
         url: String,
         id: u32,
     },
+
+    GetAttributes {
+        url: String,
+        id: u32,
+        #[structopt(short, long)]
+        filter: Option<String>,
+        #[structopt(short, long)]
+        sort: Option<String>,
+        #[structopt(short, long)]
+        offset: Option<i64>,
+        #[structopt(short, long)]
+        limit: Option<i64>,
+        #[structopt(long)]
+        csv: bool,
+    },
+    SetAttributes {
+        url: String,
+        id: u32,
+        #[structopt(short, parse(try_from_str = parse_key_val), number_of_values = 1)]
+        attribs: Vec<(String, String)>,
+    },
+    GetUsers {
+        url: String,
+        id: u32,
+        #[structopt(short, long)]
+        filter: Option<String>,
+        #[structopt(short, long)]
+        sort: Option<String>,
+        #[structopt(short, long)]
+        offset: Option<i64>,
+        #[structopt(short, long)]
+        limit: Option<i64>,
+        #[structopt(long)]
+        csv: bool,
+    },
 }
 
 #[derive(StructOpt)]
@@ -90,10 +140,10 @@ async fn main() {
             limit,
             csv,
         } => {
-            let provider = cmd::init_provisioning(url).await;
+            let provider = cmd::init_provisioning(&url).await;
             let print_type = match csv {
-                true => PrintType::Csv,
-                false => PrintType::Pretty,
+                true => Some(PrintType::Csv),
+                false => Some(PrintType::Pretty),
             };
             cmd::list_customers(provider, filter, sort, offset, limit, print_type).await
         }
@@ -142,7 +192,7 @@ async fn main() {
         },
 
         DCProv::Create { url, cmd } => {
-            let provider = cmd::init_provisioning(url).await;
+            let provider = cmd::init_provisioning(&url).await;
             let new_customer = match cmd {
                 CreateCommand::FromFile { path } => cmd::parse_customer_json_from_file(&path),
 
@@ -152,16 +202,16 @@ async fn main() {
         }
 
         DCProv::Get { url, id, csv } => {
-            let provider = cmd::init_provisioning(url).await;
+            let provider = cmd::init_provisioning(&url).await;
             let print_type = match csv {
-                true => PrintType::Csv,
-                false => PrintType::Pretty,
+                true => Some(PrintType::Csv),
+                false => Some(PrintType::Pretty),
             };
             cmd::get_customer(provider, id, print_type).await;
         }
 
         DCProv::Update { url, id, cmd } => {
-            let provider = cmd::init_provisioning(url).await;
+            let provider = cmd::init_provisioning(&url).await;
 
             let update_type = match cmd {
                 UpdateCommand::CompanyName { company_name } => {
@@ -175,8 +225,39 @@ async fn main() {
         }
 
         DCProv::Delete { url, id } => {
-            let provider = cmd::init_provisioning(url).await;
+            let provider = cmd::init_provisioning(&url).await;
             cmd::delete_customer(provider, id).await;
         }
+        DCProv::GetAttributes {
+            url,
+            id,
+            filter,
+            sort,
+            offset,
+            limit,
+            csv,
+        } => {
+            let provider = cmd::init_provisioning(&url).await;
+            let print_type = match csv {
+                true => Some(PrintType::Csv),
+                false => Some(PrintType::Pretty),
+            };
+            cmd::get_customer_attributes(provider, id, filter, sort, offset, limit, print_type)
+                .await
+        }
+        DCProv::SetAttributes { url, id, attribs } => {
+            let provider = cmd::init_provisioning(&url).await;
+            cmd::update_customer_attributes(provider, id, attribs).await;
+        },
+        DCProv::GetUsers {url, id, filter,sort , offset, limit, csv} => {
+            let provider = cmd::init_provisioning(&url).await;
+            let print_type = match csv {
+                true => Some(PrintType::Csv),
+                false => Some(PrintType::Pretty),
+            };
+            cmd::get_customer_users(provider, id, filter, sort, offset, limit, print_type).await;
+
+        }
+        
     }
 }

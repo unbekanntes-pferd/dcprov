@@ -173,4 +173,45 @@ To delete, use the delete command:
 The token will be removed from the secure storage.
 
 
+#### Getting customer users 
+
+As with listing customers, you can pass any parameters (filter, sort, offset, limit) and can select which output should be 
+generated for the user list.
+
+Example filtering for a specific user with a login "dracoonhero":
+
+```bash
+./dcprov get-users https://dracoon.team 999 --filter userName:cn:dracoonhero
+```
+
+Example storing the user list in a CSV:
+```bash
+./dcprov get-users https://dracoon.team 999 --csv > customer_999_users.csv
+```
+
+#### Getting customer attributes
+
+You can also list all customer attributes with the get-attributes command.
+
+Example filtering for a specific key with name "dracoon_id":
+
+```bash
+./dcprov get-attributes https://dracoon.team 999 --filter key:eq:dracoon_id
+```
+
+Example storing the attributes list in a CSV:
+```bash
+./dcprov get-attributes https://dracoon.team 999 --csv > customer_999_attribs.csv
+```
+
+#### Setting customer attributes
+
+You can set multiple attributes with the set-attributes command.
+
+Example setting multiple key-value pairs (-a required for each attribute!):
+
+```bash
+./dcprov set-attributes https://dracoon.team 999 --csv -a key1=value1 -a key2=value2 -a key3=value3
+```
+
 
