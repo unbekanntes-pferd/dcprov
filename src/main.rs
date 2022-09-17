@@ -1,19 +1,22 @@
-mod cmd;
+pub(crate) mod cmd;
 mod credentials;
 mod provisioning;
+
 use std::error::Error;
 
-use cmd::{PrintType, UpdateType};
-use structopt::StructOpt;
+use cmd::{PrintType, UpdateType, print_info};
+use clap::Parser;
 
 use colored::*;
 
-fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn Error>>
+
+
+fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn Error + Send + Sync + 'static>>
 where
     T: std::str::FromStr,
-    T::Err: Error + 'static,
+    T::Err: Error + Send + Sync + 'static,
     U: std::str::FromStr,
-    U::Err: Error + 'static,
+    U::Err: Error + Send + Sync + 'static,
 {
     let pos = s
         .find('=')
@@ -21,22 +24,22 @@ where
     Ok((s[..pos].parse()?, s[pos + 1..].parse()?))
 }
 
-#[derive(StructOpt)]
-#[structopt(rename_all = "kebab-case", about="DRACOON Provisioning API CLI tool (dcprov)")]
+#[derive(Parser)]
+#[clap(rename_all = "kebab-case", about="DRACOON Provisioning API CLI tool (dcprov)")]
 enum DCProv {
     /// List all available customers for specific DRACOON url
     List {
         /// DRACOON url
         url: String,
-        #[structopt(short, long, help="filter option – see API docs for details")]
+        #[clap(short, long, help="filter option – see API docs for details")]
         filter: Option<String>,
-        #[structopt(short, long, help="sort option – see API docs for details")]
+        #[clap(short, long, help="sort option – see API docs for details")]
         sort: Option<String>,
-        #[structopt(short, long, help="offset – max. 500 items returned, see API docs for details")]
+        #[clap(short, long, help="offset – max. 500 items returned, see API docs for details")]
         offset: Option<i64>,
-        #[structopt(short, long, help="limit – limits max. returned items, see API docs for details")]
+        #[clap(short, long, help="limit – limits max. returned items, see API docs for details")]
         limit: Option<i64>,
-        #[structopt(long, help="csv flag – if passed, output will be comma-separated")]
+        #[clap(long, help="csv flag – if passed, output will be comma-separated")]
         csv: bool,
     },
     
@@ -44,7 +47,7 @@ enum DCProv {
     Config {
         /// DRACOON url
         url: String,
-        #[structopt(subcommand)]
+        #[clap(subcommand)]
         cmd: ConfigCommand,
     },
     
@@ -52,7 +55,7 @@ enum DCProv {
     Create {
         /// DRACOON url
         url: String,
-        #[structopt(subcommand)]
+        #[clap(subcommand)]
         cmd: CreateCommand,
     },
     
@@ -62,7 +65,7 @@ enum DCProv {
         url: String,
         /// Customer id
         id: u32,
-        #[structopt(long, help="csv flag – if passed, output will be comma-separated")]
+        #[clap(long, help="csv flag – if passed, output will be comma-separated")]
         csv: bool,
     },
     
@@ -72,7 +75,7 @@ enum DCProv {
         url: String,
         /// Customer id
         id: u32,
-        #[structopt(subcommand)]
+        #[clap(subcommand)]
         cmd: UpdateCommand,
     },
     
@@ -90,15 +93,15 @@ enum DCProv {
         url: String,
         /// Customer id
         id: u32,
-        #[structopt(short, long, help="filter option – see API docs for details")]
+        #[clap(short, long, help="filter option – see API docs for details")]
         filter: Option<String>,
-        #[structopt(short, long, help="sort option – see API docs for details")]
+        #[clap(short, long, help="sort option – see API docs for details")]
         sort: Option<String>,
-        #[structopt(short, long, help="offset – max. 500 items returned, see API docs for details")]
+        #[clap(short, long, help="offset – max. 500 items returned, see API docs for details")]
         offset: Option<i64>,
-        #[structopt(short, long, help="limit – limits max. returned items, see API docs for details")]
+        #[clap(short, long, help="limit – limits max. returned items, see API docs for details")]
         limit: Option<i64>,
-        #[structopt(long, help="csv flag – if passed, output will be comma-separated")]
+        #[clap(long, help="csv flag – if passed, output will be comma-separated")]
         csv: bool,
     },
 
@@ -108,7 +111,7 @@ enum DCProv {
         url: String,
         /// Customer id
         id: u32,
-        #[structopt(short, parse(try_from_str = parse_key_val), number_of_values = 1)]
+        #[clap(short, parse(try_from_str = parse_key_val), number_of_values = 1)]
         attribs: Vec<(String, String)>,
     },
 
@@ -118,20 +121,23 @@ enum DCProv {
         url: String,
         /// Customer id
         id: u32,
-        #[structopt(short, long, help="filter option – see API docs for details")]
+        #[clap(short, long, help="filter option – see API docs for details")]
         filter: Option<String>,
-        #[structopt(short, long, help="sort option – see API docs for details")]
+        #[clap(short, long, help="sort option – see API docs for details")]
         sort: Option<String>,
-        #[structopt(short, long, help="offset – max. 500 items returned, see API docs for details")]
+        #[clap(short, long, help="offset – max. 500 items returned, see API docs for details")]
         offset: Option<i64>,
-        #[structopt(short, long, help="limit – limits max. returned items, see API docs for details")]
+        #[clap(short, long, help="limit – limits max. returned items, see API docs for details")]
         limit: Option<i64>,
-        #[structopt(long, help="csv flag – if passed, output will be comma-separated")]
+        #[clap(long, help="csv flag – if passed, output will be comma-separated")]
         csv: bool,
     },
+    
+    /// Print version info and logo
+    Version {}
 }
 
-#[derive(StructOpt)]
+#[derive(Parser)]
 enum ConfigCommand {
     /// Set X-SDS-Service-Token 
     Set { token: String },
@@ -141,7 +147,7 @@ enum ConfigCommand {
     Delete,
 }
 
-#[derive(StructOpt)]
+#[derive(Parser)]
 #[structopt(rename_all = "kebab-case")]
 enum CreateCommand {
     /// Create a new customer from JSON file
@@ -150,7 +156,7 @@ enum CreateCommand {
     Prompt,
 }
 
-#[derive(StructOpt)]
+#[derive(Parser)]
 #[structopt(rename_all = "kebab-case")]
 enum UpdateCommand {
     /// Update maximum quota (in bytes!)
@@ -292,6 +298,7 @@ async fn main() {
             cmd::get_customer_users(provider, id, filter, sort, offset, limit, print_type).await;
 
         }
+        DCProv::Version { } => print_info()
         
     }
 }
