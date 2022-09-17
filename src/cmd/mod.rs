@@ -785,7 +785,7 @@ pub async fn get_customer_users(
                                                        
                            
 
-pub fn print_info() {
+pub fn print_version() {
 
     println!("@@@@@@@@@@@@@   @@@@@@@@@@@@@   @@@@@@@@@@@@@  @@@@@@@@@@@@@%   @@@@@@@@@@@@  @@@@@@   @@@@@  ");
     println!("@@@@@@@@@@@@@@  @@@@@@@@@@@@@@ @@@@@@@@@@@@@@  @@@@@@@@@@@@@@  @@@@@@@@@@@@@@ @@@@@@   @@@@@  ");
@@ -803,6 +803,9 @@ pub fn print_info() {
     println!("@@@             @@                                       @@@@       @@@@@                 @@     ");
     println!("@               @                                          @@        @@                    @");
     println!("");
-    println!("{} version {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION") );
+    println!("                               {} version {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION") );
+    println!("                          DRACOON Provisioning CLI tool                       ");
+    println!("                                Octavio Simone                                      ");
+    println!("                     https://github.com/unbekanntes-pferd/dcprov         ");
 
 }

@@ -4,7 +4,7 @@ mod provisioning;
 
 use std::error::Error;
 
-use cmd::{PrintType, UpdateType, print_info};
+use cmd::{PrintType, UpdateType, print_version};
 use clap::Parser;
 
 use colored::*;
@@ -298,7 +298,7 @@ async fn main() {
             cmd::get_customer_users(provider, id, filter, sort, offset, limit, print_type).await;
 
         }
-        DCProv::Version { } => print_info()
+        DCProv::Version { } => print_version()
         
     }
 }
