@@ -25,7 +25,7 @@ async fn check_token_validity(
 
     let base_url = Url::parse(base_url).unwrap();
     let api_url = format!(
-        "{}{}{}/?limit=1",
+        "{}{}{}?limit=1",
         base_url, DRACOON_PROVISIONING_API, CUSTOMERS
     );
 
@@ -393,8 +393,8 @@ impl DRACOONProvisioning {
         let mut api_url = format!("{}{}{}", self.base_url, DRACOON_PROVISIONING_API, CUSTOMERS);
 
         match limit {
-            Some(limit) => api_url += format!("/?limit={}", limit).as_str(),
-            None => api_url += format!("/?limit={}", DEFAULT_LIMIT).as_str(),
+            Some(limit) => api_url += format!("?limit={}", limit).as_str(),
+            None => api_url += format!("?limit={}", DEFAULT_LIMIT).as_str(),
         }
 
         match offset {
@@ -527,7 +527,7 @@ impl DRACOONProvisioning {
             None => false,
         };
         let api_url = format!(
-            "{}{}{}/{}/?include_attributes={}",
+            "{}{}{}/{}?include_attributes={}",
             self.base_url,
             DRACOON_PROVISIONING_API,
             CUSTOMERS,
@@ -690,8 +690,8 @@ impl DRACOONProvisioning {
         );
 
         match limit {
-            Some(limit) => api_url += format!("/?limit={}", limit).as_str(),
-            None => api_url += format!("/?limit={}", DEFAULT_LIMIT).as_str(),
+            Some(limit) => api_url += format!("?limit={}", limit).as_str(),
+            None => api_url += format!("?limit={}", DEFAULT_LIMIT).as_str(),
         }
 
         match offset {
