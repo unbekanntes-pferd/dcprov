@@ -1,20 +1,29 @@
 [package]
 name = "dcprov"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = {version="0.11.11", features=["json"]}
-serde = {version="1.0.144", features=["derive"]}
-serde_json = "1.0.85"
-tokio = {version = "1.21.1", features = ["full"]}
-url = "2.3.1"
-chrono = {version="0.4.22", features = ["serde"]}
-clap = { version = "3.2.21", features = ["derive"] }
-keytar = "0.1.6"
-colored = "2.0.0"
+# DRACOON Provisioning API
+dco3 = "0.6.1"
+
+# async runtime
+tokio = {version = "1", features = ["full"]}
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+keyring = "2"
+colored = "2"
+dialoguer = "0.11"
+
+# utils (logging, errors)
+tracing = "*"
+tracing-subscriber = "*"
+thiserror = "*"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [profile.release]
 strip = true

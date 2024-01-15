@@ -1,12 +1,20 @@
-use crate::credentials::{get_dracoon_env, set_dracoon_env};
-use crate::provisioning::{
-    self, AttributesResponse, Customer, CustomerAttributes, DRACOONErrorResponse,
-    DRACOONProvisioning, DRACOONProvisioningError, FirstAdminUser, GetCustomersResponse,
-    KeyValueEntry, NewCustomerRequest, NewCustomerResponse, UpdateCustomerRequest,
-    UpdateCustomerResponse, UserItem, UserList,
-};
+use crate::credentials::{get_dracoon_env, set_dracoon_env, SERVICE_NAME};
 use colored::*;
+use dco3::{
+    auth::{DracoonErrorResponse, Provisioning},
+    provisioning::{
+        Customer, CustomerAttributes, FirstAdminUser, NewCustomerRequest as NewCustomerRequestDco3,
+        UpdateCustomerRequest,
+    },
+    users::{UserItem, UserAuthData, AuthMethod},
+    CustomerProvisioning, Dracoon, DracoonClientError, KeyValueEntry, ListAllParams,
+};
+use keyring::Entry;
 use std::fs;
+
+mod models;
+mod utils;
+pub use {models::*, utils::parse_key_val};
 
 // header for CSV output (list customers)
 const CUSTOMER_CSV_HEADER: &str =
@@ -20,8 +28,8 @@ const CUSTOMER_ATTRIBUTES_CSV_HEADER: &str = "key,value";
 // supported update types
 pub enum UpdateType {
     CompanyName(String),
-    QuotaMax(i64),
-    UserMax(i64),
+    QuotaMax(u64),
+    UserMax(u64),
 }
 
 // supported customer print output
@@ -31,120 +39,95 @@ pub enum PrintType {
     Csv,
 }
 
-/// This function prints an error response to screen with given error format.
-fn print_dracoon_error(err: DRACOONErrorResponse) -> () {
-    println!("{} {} {}", "Error".white().on_red(), err.code, err.message);
-    match err.debug_info {
-        Some(debug_info) => {
-            println!("{} {}", "Error details".white().on_red(), debug_info);
-        }
-        None => (),
+fn print_dracoon_error(err: &DracoonErrorResponse) {
+    println!("{} {}", "Error".white().on_red(), err.error_message());
+    if let Some(debug_info) = err.debug_info() {
+        println!("{} {}", "Error details".white().on_red(), debug_info);
     };
 }
 
-/// This function handles a generic DRACOON provisioning API error and prints all http
-/// errors to screen.
-fn handle_dracoon_errors(err: DRACOONProvisioningError) -> () {
+fn handle_dracoon_errors(err: &DracoonClientError, msg: Option<&str>) -> () {
+    let msg = msg.unwrap_or("Unknown error");
+
+    println!("{} {}", "Error".white().on_red(), msg);
+
     match err {
-        DRACOONProvisioningError::Conflict(err) => print_dracoon_error(err),
-        DRACOONProvisioningError::BadRequest(err) => print_dracoon_error(err),
-        DRACOONProvisioningError::Forbidden(err) => print_dracoon_error(err),
-        DRACOONProvisioningError::PaymentRequired(err) => print_dracoon_error(err),
-        DRACOONProvisioningError::Undocumented(err) => print_dracoon_error(err),
-        DRACOONProvisioningError::NotFound(err) => print_dracoon_error(err),
-        DRACOONProvisioningError::NotAcceptable(err) => print_dracoon_error(err),
-        DRACOONProvisioningError::Unauthorized(err) => {
-            if let Some(err) = err {
-                print_dracoon_error(err)
-            }
-        }
+        DracoonClientError::Http(err) => print_dracoon_error(err),
         _ => println!("{} {}", "Error".white().on_red(), "Uncaught error."),
     }
 }
 
-/// This function takes in a DRACOON url as a string slice and returns a provider.
-/// It is the main entry point creating a struct with methods to perform reequests
-/// to the DRACOON provisioning API.
-/// If no token is stored, the token will be prompted.
-///
-/// # Example
-/// '''
-/// let url = "https://dracoon.team";
-/// let provider = init_provisioning(url);
-/// '''
-/// # Errors
-/// If a wrong token is provided, the function will with an Unauthorized error.
-pub async fn init_provisioning(url: &str) -> DRACOONProvisioning {
-    let mut from_creds: bool = false;
-    let token = match get_dracoon_env(&url) {
-        Ok(pwd) => {
-            from_creds = true;
-            pwd
-        }
-        Err(_) => {
-            println!("Please enter X-SDS-Service-Token: ");
-            let mut service_token = String::new();
-            std::io::stdin()
-                .read_line(&mut service_token)
-                .expect(&"Error parsing user input (service token).");
-
-            service_token
-        }
-    };
-
-    let provider: DRACOONProvisioning;
-
-    match provisioning::DRACOONProvisioning::new(
-        url.trim_end().to_string(),
-        token.trim_end().to_string(),
-    )
-    .await
-    {
-        Ok(prov) => provider = prov,
-        Err(err) => {
-            println!(
-                "{} {}",
-                "Error".white().on_red(),
-                "Could not create provider."
-            );
-            println!("{:?}", err);
-            std::process::exit(1)
-        }
-    };
-
-    if from_creds == false {
-        loop {
-            println!("Store service token for {} securely? (Y/N)", url);
-
-            let mut store = String::new();
-            std::io::stdin()
-                .read_line(&mut store)
-                .expect("Error parsing user input (store credentials response).");
-
-            match store.as_str().trim() {
-                "Y" => {
-                    set_dracoon_env(&url, &token);
-                    break;
-                }
-                "y" => {
-                    set_dracoon_env(&url, &token);
-                    break;
-                }
-                "N" => break,
-                "n" => break,
-                _ => (),
-            };
-        }
+pub fn handle_errors(err: &DcProvError) {
+    match err {
+        DcProvError::BadRequest(err) => print_dracoon_error(err),
+        DcProvError::Unauthorized(err) => print_dracoon_error(err),
+        DcProvError::Forbidden(err) => print_dracoon_error(err),
+        DcProvError::NotFound(err) => print_dracoon_error(err),
+        DcProvError::PaymentRequired(err) => print_dracoon_error(err),
+        DcProvError::Conflict(err) => print_dracoon_error(err),
+        DcProvError::Unknown(err) => print_dracoon_error(err),
+        DcProvError::Io => println!("{} {}", "Error".white().on_red(), "IO error."),
+        DcProvError::Other => println!("{} {}", "Error".white().on_red(), "Uncaught error."),
+        _ => println!("{} {}", "Error".white().on_red(), "Uncaught error."),
     }
 
-    provider
+    std::process::exit(1)
 }
 
-/// This function returns the string output for a single customer and takes in a customer
-/// struct as well as a print type.
-/// Possible types:
-/// - Csv: output customer info separated by commas
-/// - Pretty: output customer info "pretty printed"
+pub async fn init_provisioning(
+    url: &str,
+    token: Option<String>,
+) -> Result<Dracoon<Provisioning>, DcProvError> {
+    let url = if url.starts_with("https://") {
+        url.to_string()
+    } else if url.starts_with("http://") {
+        url.replace("http://", "https://")
+    } else {
+        format!("https://{}", url)
+    };
+
+    let ask_for_token = || {
+        dialoguer::Password::new()
+            .with_prompt("Please enter X-SDS-Service-Token: ")
+            .interact()
+            .or(Err(DcProvError::Io))
+    };
+
+    let entry = Entry::new(SERVICE_NAME, &url).map_err(|_| DcProvError::CredentialStorageFailed);
+
+    let (token, store) = match token {
+        // Provided token, don't store
+        Some(token) => (token, false),
+        None => {
+            // Entry present and holds a secret
+            if let Ok(entry) = &entry {
+                if let Ok(stored_secret) = get_dracoon_env(entry) {
+                    (stored_secret, false)
+                } else {
+                    // Entry present but no secret, ask and store
+                    (ask_for_token()?, true)
+                }
+            } else {
+                // No entry, ask but don't store
+                (ask_for_token()?, false)
+            }
+        }
+    };
+
+    // If necessary, create a new entry to store the secret
+    if store {
+        let entry =
+            Entry::new(SERVICE_NAME, &url).map_err(|_| DcProvError::CredentialStorageFailed)?;
+        set_dracoon_env(&entry, &token)?;
+    }
+
+    Ok(Dracoon::builder()
+        .with_base_url(&url)
+        .with_provisioning_token(token)
+        .build_provisioning()
+        .map_err(|_| DcProvError::InvalidAccount)?)
+}
+
 fn customer_to_string(customer: Customer, print_type: PrintType) -> String {
     match print_type {
         PrintType::Csv => {
@@ -168,11 +151,6 @@ fn customer_to_string(customer: Customer, print_type: PrintType) -> String {
     }
 }
 
-/// This function returns the string output for a single customer and takes in a customer
-/// struct as well as a print type.
-/// Possible types:
-/// - Csv: output customer info separated by commas
-/// - Pretty: output customer info "pretty printed"
 fn user_to_string(user: UserItem, print_type: PrintType) -> String {
     match print_type {
         PrintType::Csv => {
@@ -205,200 +183,110 @@ fn customer_attribute_to_string(attrib: KeyValueEntry, print_type: PrintType) ->
     }
 }
 
-/// This function takes in a provider and optional parameters.
-///
-/// @param filter
-/// This is an API parameter and allows filtering the customer list
-/// by allowed parameters like companyName.
-/// Usage: see API docs (https://dracoon.team/api)
-///
-/// # Example
-/// '''
-/// let filter = "companyName:cn:DRACOON"
-/// '''
-/// /// @param sort
-/// This is an API parameter and allows sorting the customer list
-/// by allowed parameters like companyName.
-/// Usage: see API docs (https://dracoon.team/api)
-///
-/// # Example
-/// '''
-/// let sort = "companyName:asc"
-/// '''
-///
-/// @param offset
-/// This is an API parameter and allows fetching the next batch of customers.
-/// The DRACOON API provides 500 items max. per request.
-/// In order to get next items, use the offset.
-/// Usage: see API docs (https://dracoon.team/api)
-///
-/// @param limit
-/// This is an API parameter and allows limiting the amount of customers returned.
-/// Usage: see API docs (https://dracoon.team/api)
 pub async fn list_customers(
-    provider: DRACOONProvisioning,
+    provider: Dracoon<Provisioning>,
     filter: Option<String>,
     sort: Option<String>,
-    offset: Option<i64>,
-    limit: Option<i64>,
+    offset: Option<u64>,
+    limit: Option<u64>,
     print_type: Option<PrintType>,
-) -> () {
-    let print_type = match print_type {
-        Some(print_type) => print_type,
-        None => PrintType::Pretty,
+) {
+    let print_type = print_type.unwrap_or(PrintType::Pretty);
+
+    let params = build_params(filter, sort, offset, limit);
+
+    let customers = provider.get_customers(Some(params)).await;
+
+    if let Err(ref e) = customers {
+        handle_dracoon_errors(e, Some("Could not list customers."));
+        std::process::exit(1)
     };
 
-    let customer_res: Option<GetCustomersResponse>;
+    let customers = customers.unwrap();
 
-    match provider
-        .get_customers(filter, sort, limit, offset, None)
-        .await
-    {
-        Ok(res) => customer_res = Some(res),
-        Err(e) => {
+    match print_type {
+        PrintType::Csv => {
+            println!("{}", CUSTOMER_CSV_HEADER);
+        }
+        PrintType::Pretty => {
             println!(
-                "{} {}",
-                "Error".white().on_red(),
-                "Could not list customers."
+                "total customers: {} | offset: {} | limit: {}",
+                customers.range.total, customers.range.offset, customers.range.limit
             );
-            handle_dracoon_errors(e);
-            std::process::exit(1)
         }
     };
 
-    if let Some(customer_res) = customer_res {
-        match print_type {
-            PrintType::Csv => {
-                println!("{}", CUSTOMER_CSV_HEADER);
-            }
-            PrintType::Pretty => {
-                println!(
-                    "total customers: {} | offset: {} | limit: {}",
-                    customer_res.range.total, customer_res.range.offset, customer_res.range.limit
-                );
-            }
-        };
-
-        for customer in customer_res.items {
-            let cus_line = customer_to_string(customer, print_type);
-            println!("{}", cus_line);
-        }
-    };
-}
-
-/// This function takes in a provider, an id for the customer and an optional print type (default is pretty printed).
-pub async fn get_customer(
-    provider: DRACOONProvisioning,
-    id: u32,
-    print_type: Option<PrintType>,
-) -> () {
-    let print_type = match print_type {
-        Some(print_type) => print_type,
-        None => PrintType::Pretty,
-    };
-
-    let customer: Option<Customer>;
-
-    match provider.get_customer(id.into(), None).await {
-        Ok(res) => customer = Some(res),
-        Err(e) => {
-            println!(
-                "{} {}",
-                "Error".white().on_red(),
-                "Could not get customer info."
-            );
-            handle_dracoon_errors(e);
-            std::process::exit(1)
-        }
-    };
-
-    if let Some(customer) = customer {
+    for customer in customers.items {
         let cus_line = customer_to_string(customer, print_type);
         println!("{}", cus_line);
-    };
+    }
 }
 
-/// This function takes in an update type and returns the corresponding request for the update_customer function.
-fn create_update_request(update_type: UpdateType) -> UpdateCustomerRequest {
-    let update_customer: UpdateCustomerRequest = match update_type {
-        UpdateType::CompanyName(name) => UpdateCustomerRequest {
-            company_name: Some(name),
-            customer_contract_type: None,
-            quota_max: None,
-            user_max: None,
-            is_locked: None,
-            provider_customer_id: None,
-            webhooks_max: None,
-        },
-        UpdateType::QuotaMax(quota_max) => UpdateCustomerRequest {
-            company_name: None,
-            customer_contract_type: None,
-            quota_max: Some(quota_max),
-            user_max: None,
-            is_locked: None,
-            provider_customer_id: None,
-            webhooks_max: None,
-        },
-        UpdateType::UserMax(user_max) => UpdateCustomerRequest {
-            company_name: None,
-            customer_contract_type: None,
-            quota_max: None,
-            user_max: Some(user_max),
-            is_locked: None,
-            provider_customer_id: None,
-            webhooks_max: None,
-        },
-    };
-
-    update_customer
-}
-
-/// This function takes in a provider, an id for the customer and an update type and updates the given
-/// customer info.
-pub async fn update_customer(
-    provider: DRACOONProvisioning,
-    id: u32,
-    update_type: UpdateType,
+pub async fn get_customer(
+    provider: Dracoon<Provisioning>,
+    id: u64,
+    print_type: Option<PrintType>,
 ) -> () {
-    let customer: Option<UpdateCustomerResponse>;
+    let print_type = print_type.unwrap_or(PrintType::Pretty);
 
+    let customer = provider.get_customer(id, None).await;
+
+    if let Err(ref e) = customer {
+        handle_dracoon_errors(e, Some("Could not get customer info."));
+        std::process::exit(1)
+    };
+
+    let customer = customer.unwrap();
+
+    let cus_line = customer_to_string(customer, print_type);
+    println!("{}", cus_line);
+}
+
+fn create_update_request(update_type: UpdateType) -> UpdateCustomerRequest {
+    match update_type {
+        UpdateType::CompanyName(name) => UpdateCustomerRequest::builder()
+            .with_company_name(name)
+            .build(),
+        UpdateType::QuotaMax(quota_max) => UpdateCustomerRequest::builder()
+            .with_quota_max(quota_max)
+            .build(),
+        UpdateType::UserMax(user_max) => UpdateCustomerRequest::builder()
+            .with_user_max(user_max)
+            .build(),
+    }
+}
+
+pub async fn update_customer(provider: Dracoon<Provisioning>, id: u64, update_type: UpdateType) {
     let update_customer = create_update_request(update_type);
 
-    match provider.update_customer(id.into(), update_customer).await {
-        Ok(res) => customer = Some(res),
-        Err(e) => {
-            println!(
-                "{} {}",
-                "Error".white().on_red(),
-                "Could not update customer."
-            );
-            handle_dracoon_errors(e);
-            std::process::exit(1);
-        }
+    let customer = provider.update_customer(id.into(), update_customer).await;
+
+    if let Err(ref e) = customer {
+        handle_dracoon_errors(e, Some("Could not update customer."));
+        std::process::exit(1)
     };
 
-    if let Some(customer) = customer {
-        println!(
-            "{}{}{}",
-            "Success ".green(),
-            "Updated customer with id ",
-            id
-        );
+    let customer = customer.unwrap();
 
-        let cus_line = format!(
-            "company: {} | contract: {} | users max: {} | quota max: {} | id: {}",
-            customer.company_name,
-            customer.customer_contract_type,
-            customer.user_max,
-            customer.quota_max,
-            customer.id
-        );
-        println!("{}", cus_line);
-    };
+    println!(
+        "{}{}{}",
+        "Success ".green(),
+        "Updated customer with id ",
+        id
+    );
+
+    let cus_line = format!(
+        "company: {} | contract: {} | users max: {} | quota max: {} | id: {}",
+        customer.company_name,
+        customer.customer_contract_type,
+        customer.user_max,
+        customer.quota_max,
+        customer.id
+    );
+    println!("{}", cus_line);
 }
 
-/// This function takes in a provider, an id for the customer and an update type and deletes the customer.
-pub async fn delete_customer(provider: DRACOONProvisioning, id: u32) -> () {
+pub async fn delete_customer(provider: Dracoon<Provisioning>, id: u64) {
     match provider.delete_customer(id.into()).await {
         Ok(_) => {
             println!(
@@ -409,20 +297,15 @@ pub async fn delete_customer(provider: DRACOONProvisioning, id: u32) -> () {
             );
             std::process::exit(0)
         }
-        Err(e) => {
-            println!(
-                "{} {}",
-                "Error".white().on_red(),
-                "Could not delete customer."
-            );
-            handle_dracoon_errors(e);
+        Err(ref e) => {
+            handle_dracoon_errors(e, Some("Could not delete customer."));
             std::process::exit(1);
         }
     };
 }
 
 /// This function takes in a path to a JSON file (as string slice) and returns a request struct to create a new customer.
-pub fn parse_customer_json_from_file(path: &str) -> NewCustomerRequest {
+pub fn parse_customer_json_from_file(path: &str) -> Result<NewCustomerRequestDco3, DcProvError> {
     let raw_json = fs::read_to_string(path);
 
     let raw_json = match raw_json {
@@ -453,86 +336,62 @@ pub fn parse_customer_json_from_file(path: &str) -> NewCustomerRequest {
         }
     };
 
-    new_customer
+    Ok(new_customer.into())
 }
 
 /// This function prompts for required fields via stdout and returns a request struct to create a new customer.
-pub fn prompt_new_customer() -> NewCustomerRequest {
-    let first_name: String;
-    let last_name: String;
-    let final_quota_max: i64;
-    let final_user_max: i64;
-
+pub fn prompt_new_customer() -> Result<NewCustomerRequestDco3, DcProvError> {
     // first admin user
     println!("{}", "Step 1: Enter first admin user".white().on_blue());
 
-    // full name
-    loop {
-        println!("Please enter full name (first & last name separated by SPACE): ");
-        let mut full_name = String::new();
-        std::io::stdin()
-            .read_line(&mut full_name)
-            .expect("Error parsing user input (full name).");
+    let first_name: String = dialoguer::Input::new()
+        .with_prompt("Please enter first name: ")
+        .interact()
+        .or(Err(DcProvError::Io))?;
 
-        let names: Vec<&str> = full_name.split(" ").collect();
+    let last_name: String = dialoguer::Input::new()
+        .with_prompt("Please enter last name: ")
+        .interact()
+        .or(Err(DcProvError::Io))?;
 
-        match names.len() {
-            2 => {
-                first_name = names[0].to_string();
-                last_name = names[1].trim().to_string();
-                break;
-            }
-            _ => {
-                println!(
-                    "{} {}",
-                    "Error".white().on_red(),
-                    "Please use correct format (firstname lastname)."
-                );
-            }
-        };
-    }
+    let email: String = dialoguer::Input::new()
+        .with_prompt("Please enter email address: ")
+        .interact()
+        .or(Err(DcProvError::Io))?;
 
-    // email
-    println!("Please enter email address: ");
-    let mut email = String::new();
-    std::io::stdin()
-        .read_line(&mut email)
-        .expect("Error parsing user input (email).");
-
-    // optional username
-    println!("Please enter username (optional – default: email): ");
-    let mut username = String::new();
-    std::io::stdin()
-        .read_line(&mut username)
-        .expect("Error parsing user input (email).");
-
-    let username = match username.trim() {
-        "" => email.clone(),
-        _ => username,
+    let user_name: Option<String> = if dialoguer::Confirm::new()
+        .with_prompt("Provide username?")
+        .interact()
+        .or(Err(DcProvError::Io))?
+    {
+        Some(
+            dialoguer::Input::new()
+                .with_prompt("Please enter username: ")
+                .interact()
+                .or(Err(DcProvError::Io))?,
+        )
+    } else {
+        None
     };
 
     // customer
     println!("{}", "Step 2: Configure customer".white().on_blue());
 
-    println!("Please enter company name: ");
-    let mut company_name = String::new();
-    std::io::stdin()
-        .read_line(&mut company_name)
-        .expect("Error parsing user input (company name).");
+    let company_name: String = dialoguer::Input::new()
+        .with_prompt("Please enter company name: ")
+        .interact()
+        .or(Err(DcProvError::Io))?;
 
-    // users max
-    loop {
-        println!("Please enter maxium users: ");
-        let mut user_max = String::new();
-        std::io::stdin()
-            .read_line(&mut user_max)
-            .expect("Error parsing user input (user).");
+    let quota_max = loop {
+        let quota_max: String = dialoguer::Input::new()
+            .with_prompt("Please enter maxium quota (in bytes): ")
+            .interact()
+            .or(Err(DcProvError::Io))?;
 
-        match user_max.trim().parse::<i64>() {
+        match quota_max.trim().parse::<u64>() {
             Ok(num) => {
                 if num > 0 {
-                    final_user_max = num;
-                    break;
+                    break num;
                 }
             }
             Err(_) => {
@@ -543,21 +402,18 @@ pub fn prompt_new_customer() -> NewCustomerRequest {
                 );
             }
         };
-    }
+    };
 
-    // quota max
-    loop {
-        println!("Please enter maxium quota (in bytes): ");
-        let mut quota_max = String::new();
-        std::io::stdin()
-            .read_line(&mut quota_max)
-            .expect("Error parsing user input (quota).");
+    let user_max = loop {
+        let user_max: String = dialoguer::Input::new()
+            .with_prompt("Please enter maxium users: ")
+            .interact()
+            .or(Err(DcProvError::Io))?;
 
-        match quota_max.trim().parse::<i64>() {
+        match user_max.trim().parse::<u64>() {
             Ok(num) => {
                 if num > 0 {
-                    final_quota_max = num;
-                    break;
+                    break num;
                 }
             }
             Err(_) => {
@@ -568,225 +424,164 @@ pub fn prompt_new_customer() -> NewCustomerRequest {
                 );
             }
         };
-    }
+    };
 
-    let first_admin = FirstAdminUser::new_local(
-        first_name.trim().to_string(),
-        last_name.trim().to_string(),
-        Some(username.trim().to_string()),
-        email.trim().to_string(),
-        None,
-    );
+    let user_name = user_name.unwrap_or(email.clone());
 
-    NewCustomerRequest::new(
-        "pay".to_string(),
-        final_quota_max,
-        final_user_max,
-        first_admin,
-        Some(company_name.trim().to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+    // TODO: remove manual build once dco3 fixes bug with must_change_password
+    let auth_data = UserAuthData::builder(AuthMethod::Basic).with_must_change_password(true).build();
+
+    let first_admin_user = FirstAdminUser {
+        first_name,
+        last_name,
+        user_name: Some(user_name),
+        email: Some(email),
+        auth_data: Some(auth_data),
+        notify_user: Some(true),
+        receiver_language: None,
+        phone: None
+    };
+
+    Ok(
+        NewCustomerRequestDco3::builder("pay", quota_max, user_max, first_admin_user)
+            .with_company_name(company_name)
+            .build(),
     )
 }
 
-/// This function takes in a provider a a request struct to create a new customer and will attempt to create a new
-/// customer based on the provided struct.
 pub async fn create_customer(
-    provider: DRACOONProvisioning,
-    new_customer: NewCustomerRequest,
+    provider: Dracoon<Provisioning>,
+    new_customer: NewCustomerRequestDco3,
 ) -> () {
-    let customer_res: Option<NewCustomerResponse>;
+    let customer = provider.create_customer(new_customer).await;
 
-    match provider.create_customer(new_customer).await {
-        Ok(res) => customer_res = Some(res),
-        Err(e) => {
-            println!(
-                "{} {}",
-                "Error".white().on_red(),
-                "Could not create customer."
-            );
-            handle_dracoon_errors(e);
-            std::process::exit(1)
-        }
+    if let Err(ref e) = customer {
+        handle_dracoon_errors(e, Some(" customer info."));
+        std::process::exit(1)
     };
 
-    if let Some(customer_res) = customer_res {
-        println!("{}{}", "Success ".green(), "Customer creeated.");
-        println!(
-            "Company name: {} | user max: {} | quota max: {} | id: {}",
-            customer_res.company_name,
-            customer_res.user_max,
-            customer_res.quota_max,
-            customer_res.id
-        );
-    };
+    let customer = customer.unwrap();
+
+    println!("{}{}", "Success ".green(), "Customer creeated.");
+    println!(
+        "Company name: {} | user max: {} | quota max: {} | id: {}",
+        customer.company_name, customer.user_max, customer.quota_max, customer.id
+    );
 }
 
 pub async fn get_customer_attributes(
-    provider: DRACOONProvisioning,
-    id: u32,
+    provider: Dracoon<Provisioning>,
+    id: u64,
     filter: Option<String>,
     sort: Option<String>,
-    offset: Option<i64>,
-    limit: Option<i64>,
+    offset: Option<u64>,
+    limit: Option<u64>,
     print_type: Option<PrintType>,
-) -> () {
-    let print_type = match print_type {
-        Some(print_type) => print_type,
-        None => PrintType::Pretty,
+) {
+    let print_type = print_type.unwrap_or(PrintType::Pretty);
+
+    let params = build_params(filter, sort, offset, limit);
+
+    let attribs = provider
+        .get_customer_attributes(id.into(), Some(params))
+        .await;
+
+    if let Err(ref e) = attribs {
+        handle_dracoon_errors(e, Some("Could not get customer attributes."));
+        std::process::exit(1)
     };
 
-    let attribs_res: Option<AttributesResponse>;
+    let attribs = attribs.unwrap();
 
-    match provider
-        .get_customer_attributes(id.into(), filter, sort, offset, limit)
-        .await
-    {
-        Ok(res) => attribs_res = Some(res),
-        Err(e) => {
-            println!(
-                "{} {}",
-                "Error".white().on_red(),
-                "Could not create customer."
-            );
-            handle_dracoon_errors(e);
-            std::process::exit(1)
+    match print_type {
+        PrintType::Csv => {
+            println!("{}", CUSTOMER_ATTRIBUTES_CSV_HEADER);
+        }
+        PrintType::Pretty => {
+            println!("Customer attributes for customer with id: {}", id);
         }
     };
 
-    if let Some(attribs_res) = attribs_res {
-        match print_type {
-            PrintType::Csv => {
-                println!("{}", CUSTOMER_ATTRIBUTES_CSV_HEADER);
-            }
-            PrintType::Pretty => {
-                println!("Customer attributes for customer with id: {}", id);
-            }
-        };
+    if attribs.items.len() == 0 {
+        println!("Customer has no customer attributes.")
+    }
 
-        if attribs_res.items.len() == 0 {
-            println!("Customer has no customer attributes.")
-        }
-
-        for attrib in attribs_res.items {
-            let attrib_line = customer_attribute_to_string(attrib, print_type);
-            println!("{}", attrib_line);
-        }
-    };
+    for attrib in attribs.items {
+        let attrib_line = customer_attribute_to_string(attrib, print_type);
+        println!("{}", attrib_line);
+    }
 }
 
 pub async fn update_customer_attributes(
-    provider: DRACOONProvisioning,
-    id: u32,
+    provider: Dracoon<Provisioning>,
+    id: u64,
     attribs: Vec<(String, String)>,
-) -> () {
-    let customer: Option<Customer>;
-
+) {
     let mut customer_attribs = CustomerAttributes::new();
+    attribs.iter().for_each(|(key, value)| {
+        customer_attribs.add_attribute(key, value);
+    });
 
-    for keyvalue in attribs {
-        customer_attribs.add_attribute(keyvalue.0, keyvalue.1)
-    }
-
-    match provider
+    let customer = provider
         .update_customer_attributes(id.into(), customer_attribs)
-        .await
-    {
-        Ok(res) => customer = Some(res),
-        Err(e) => {
-            println!(
-                "{} {}",
-                "Error".white().on_red(),
-                "Could not update customer attributes."
-            );
-            handle_dracoon_errors(e);
-            std::process::exit(1);
-        }
+        .await;
+
+    if let Err(ref e) = customer {
+        handle_dracoon_errors(e, Some("Could not update customer attributes."));
+        std::process::exit(1)
     };
 
-    if let Some(customer) = customer {
-        println!(
-            "{}{}{}",
-            "Success ".green(),
-            "Updated customer attributes of customer with id ",
-            customer.id
-        );
-    };
+    let customer = customer.unwrap();
+
+    println!(
+        "{}{}{}",
+        "Success ".green(),
+        "Updated customer attributes of customer with id ",
+        customer.id
+    );
 }
 
 pub async fn get_customer_users(
-    provider: DRACOONProvisioning,
-    id: u32,
+    provider: Dracoon<Provisioning>,
+    id: u64,
     filter: Option<String>,
     sort: Option<String>,
-    offset: Option<i64>,
-    limit: Option<i64>,
+    offset: Option<u64>,
+    limit: Option<u64>,
     print_type: Option<PrintType>,
 ) -> () {
-    let print_type = match print_type {
-        Some(print_type) => print_type,
-        None => PrintType::Pretty,
+    let print_type = print_type.unwrap_or(PrintType::Pretty);
+
+    let params = build_params(filter, sort, offset, limit);
+
+    let user_list = provider.get_customer_users(id.into(), Some(params)).await;
+
+    if let Err(ref e) = user_list {
+        handle_dracoon_errors(e, Some("Could not get customer users."));
+        std::process::exit(1)
     };
 
-    let user_res: Option<UserList>;
+    let user_list = user_list.unwrap();
 
-    match provider
-        .get_customer_users(id.into(), filter, sort, offset, limit)
-        .await
-    {
-        Ok(res) => user_res = Some(res),
-        Err(e) => {
+    match print_type {
+        PrintType::Csv => {
+            println!("{}", CUSTOMER_USERS_CSV_HEADER);
+        }
+        PrintType::Pretty => {
             println!(
-                "{} {}",
-                "Error".white().on_red(),
-                "Could not list customer users."
+                "total users: {} | offset: {} | limit: {}",
+                user_list.range.total, user_list.range.offset, user_list.range.limit
             );
-            handle_dracoon_errors(e);
-            std::process::exit(1)
         }
     };
 
-    if let Some(user_res) = user_res {
-        match print_type {
-            PrintType::Csv => {
-                println!("{}", CUSTOMER_USERS_CSV_HEADER);
-            }
-            PrintType::Pretty => {
-                println!(
-                    "total users: {} | offset: {} | limit: {}",
-                    user_res.range.total, user_res.range.offset, user_res.range.limit
-                );
-            }
-        };
-
-        for user in user_res.items {
-            let user_line = user_to_string(user, print_type);
-            println!("{}", user_line);
-        }
-    };
+    for user in user_list.items {
+        let user_line = user_to_string(user, print_type);
+        println!("{}", user_line);
+    }
 }
 
-                                                          
-                                                        
-                                                          
-                                                        
-                                                           
-                                                           
-                                                          
-                                                          
-                                                          
-                                                          
-                                                         
-                                                        
-                                                         
-                                                       
-                           
-
 pub fn print_version() {
-
     println!("@@@@@@@@@@@@@   @@@@@@@@@@@@@   @@@@@@@@@@@@@  @@@@@@@@@@@@@%   @@@@@@@@@@@@  @@@@@@   @@@@@  ");
     println!("@@@@@@@@@@@@@@  @@@@@@@@@@@@@@ @@@@@@@@@@@@@@  @@@@@@@@@@@@@@  @@@@@@@@@@@@@@ @@@@@@   @@@@@  ");
     println!("@@@@@   @@@@@@  @@@@@   @@@@@@ @@@@@@   @@@@@  @@@@@    @@@@@  @@@@@   @@@@@@ @@@@@@   @@@@@  ");
@@ -803,9 +598,49 @@ pub fn print_version() {
     println!("@@@             @@                                       @@@@       @@@@@                 @@     ");
     println!("@               @                                          @@        @@                    @");
     println!("");
-    println!("                               {} version {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION") );
+    println!(
+        "                               {} version {}",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    );
     println!("                          DRACOON Provisioning CLI tool                       ");
-    println!("                                Octavio Simone                                      ");
+    println!(
+        "                                Octavio Simone                                      "
+    );
     println!("                     https://github.com/unbekanntes-pferd/dcprov         ");
+}
 
+fn build_params(
+    filter: Option<String>,
+    sort: Option<String>,
+    offset: Option<u64>,
+    limit: Option<u64>,
+) -> ListAllParams {
+    let params = ListAllParams::builder();
+
+    let params = if let Some(offset) = offset {
+        params.with_offset(offset)
+    } else {
+        params
+    };
+
+    let params = if let Some(limit) = limit {
+        params.with_limit(limit)
+    } else {
+        params
+    };
+
+    let params = if let Some(filter) = filter {
+        params.with_filter(filter)
+    } else {
+        params
+    };
+
+    let params = if let Some(sort) = sort {
+        params.with_sort(sort)
+    } else {
+        params
+    };
+
+    params.build()
 }
