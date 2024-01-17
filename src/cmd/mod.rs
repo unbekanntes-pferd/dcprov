@@ -6,7 +6,7 @@ use dco3::{
         Customer, CustomerAttributes, FirstAdminUser, NewCustomerRequest as NewCustomerRequestDco3,
         UpdateCustomerRequest,
     },
-    users::{UserItem, UserAuthData, AuthMethod},
+    users::{AuthMethod, UserAuthData, UserItem},
     CustomerProvisioning, Dracoon, DracoonClientError, KeyValueEntry, ListAllParams,
 };
 use keyring::Entry;
@@ -190,10 +190,11 @@ pub async fn list_customers(
     offset: Option<u64>,
     limit: Option<u64>,
     print_type: Option<PrintType>,
+    all: bool,
 ) {
     let print_type = print_type.unwrap_or(PrintType::Pretty);
 
-    let params = build_params(filter, sort, offset, limit);
+    let params = build_params(filter.clone(), sort.clone(), offset, limit);
 
     let customers = provider.get_customers(Some(params)).await;
 
@@ -202,7 +203,7 @@ pub async fn list_customers(
         std::process::exit(1)
     };
 
-    let customers = customers.unwrap();
+    let mut customers = customers.unwrap();
 
     match print_type {
         PrintType::Csv => {
@@ -215,6 +216,23 @@ pub async fn list_customers(
             );
         }
     };
+
+    if all {
+        for offset in 500..=customers.range.total {
+            let params = build_params(filter.clone(), sort.clone(), Some(offset), limit);
+
+            let next_customers = provider.get_customers(Some(params)).await;
+
+            if let Err(ref e) = next_customers {
+                handle_dracoon_errors(e, Some("Could not list customers."));
+                std::process::exit(1)
+            };
+
+            let next_customers = next_customers.unwrap();
+
+            customers.items.extend(next_customers.items);
+        }
+    }
 
     for customer in customers.items {
         let cus_line = customer_to_string(customer, print_type);
@@ -429,7 +447,9 @@ pub fn prompt_new_customer() -> Result<NewCustomerRequestDco3, DcProvError> {
     let user_name = user_name.unwrap_or(email.clone());
 
     // TODO: remove manual build once dco3 fixes bug with must_change_password
-    let auth_data = UserAuthData::builder(AuthMethod::Basic).with_must_change_password(true).build();
+    let auth_data = UserAuthData::builder(AuthMethod::Basic)
+        .with_must_change_password(true)
+        .build();
 
     let first_admin_user = FirstAdminUser {
         first_name,
@@ -439,7 +459,7 @@ pub fn prompt_new_customer() -> Result<NewCustomerRequestDco3, DcProvError> {
         auth_data: Some(auth_data),
         notify_user: Some(true),
         receiver_language: None,
-        phone: None
+        phone: None,
     };
 
     Ok(

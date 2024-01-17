@@ -73,6 +73,11 @@ pub enum DCProvCommand {
         limit: Option<u64>,
         #[clap(long, help = "csv flag – if passed, output will be comma-separated")]
         csv: bool,
+
+        #[clap(long, help = "will fetch all items (default: paginated, 500 results)")]
+        all: bool
+
+
     },
 
     /// Configure X-SDS-Service-Token for specific DRACOON url
