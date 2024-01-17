@@ -22,6 +22,7 @@ async fn main() {
             offset,
             limit,
             csv,
+            all,
         } => {
             let provider = cmd::init_provisioning(&url, opt.token).await;
             let print_type = match csv {
@@ -32,7 +33,7 @@ async fn main() {
                 handle_errors(e)
             }
             let provider = provider.unwrap();
-            cmd::list_customers(provider, filter, sort, offset, limit, print_type).await
+            cmd::list_customers(provider, filter, sort, offset, limit, print_type, all).await
         }
 
         DCProvCommand::Config { url, cmd } => {
