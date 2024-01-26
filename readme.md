@@ -6,11 +6,9 @@
 
 This is a command line tool for the DRACOON provisioning API built in Rust with: 
 
-* reqwest
+* dco3 (DRACOON API)
 * clap
-* serde
-* tokio (async runtime)
-* keytar (bindings)
+* keyring
 
 DRACOON is a cloud storage product / service (SaaS) by DRACOON GmbH (https://dracoon.com). 
 DRACOON API documentation can be found here (Swagger UI):
