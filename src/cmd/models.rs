@@ -1,7 +1,10 @@
 use super::utils::parse_key_val;
 use clap::Parser;
-use dco3::{auth::DracoonErrorResponse, provisioning::{FirstAdminUser, CustomerAttributes}};
 use dco3::provisioning::NewCustomerRequest as NewCustomerRequestDco3;
+use dco3::{
+    auth::DracoonErrorResponse,
+    provisioning::{CustomerAttributes, FirstAdminUser},
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(thiserror::Error, Debug)]
@@ -39,7 +42,6 @@ pub enum DcProvError {
     about = "DRACOON Provisioning API CLI tool (dcprov)"
 )]
 pub struct DcProv {
-
     /// optional X-SDS-Service-Token
     #[clap(short, long, help = "Optional X-SDS-Service-Token")]
     pub token: Option<String>,

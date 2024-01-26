@@ -20,9 +20,7 @@ pub use {models::*, utils::parse_key_val};
 const CUSTOMER_CSV_HEADER: &str =
     "companyName,contractType,userUsed,userMax,quotaUsed,quotaMax,id,createdAt";
 
-// header for CSV output (list customer users)
-const CUSTOMER_USERS_CSV_HEADER: &str = "id,firstName,lastName,userName,isLocked";
-
+const CUSTOMER_USERS_CSV_HEADER: &str = "id,firstName,lastName,userName,isLocked,lastLoginAt";
 const CUSTOMER_ATTRIBUTES_CSV_HEADER: &str = "key,value";
 
 // supported update types
@@ -155,15 +153,20 @@ fn user_to_string(user: UserItem, print_type: PrintType) -> String {
     match print_type {
         PrintType::Csv => {
             let user_line = format!(
-                "{},{},{},{},{}",
-                user.id, user.first_name, user.last_name, user.user_name, user.is_locked
+                "{},{},{},{},{},{}",
+                user.id,
+                user.first_name,
+                user.last_name,
+                user.user_name,
+                user.is_locked,
+                user.last_login_success_at.unwrap_or("N/A".into())
             );
             user_line
         }
         PrintType::Pretty => {
             let user_line = format!(
-                "id: {} | first name: {} | last name: {} | user name: {} | is locked: {}",
-                user.id, user.first_name, user.last_name, user.user_name, user.is_locked
+                "id: {} | first name: {} | last name: {} | user name: {} | is locked: {} | last login: {}",
+                user.id, user.first_name, user.last_name, user.user_name, user.is_locked, user.last_login_success_at.unwrap_or("N/A".into())
             );
             user_line
         }

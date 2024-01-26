@@ -1,8 +1,8 @@
 pub(crate) mod cmd;
 mod credentials;
 use cmd::{
-    handle_errors, print_version, ConfigCommand, CreateCommand, DCProvCommand, DcProv, PrintType,
-    UpdateCommand, UpdateType, DcProvError,
+    handle_errors, print_version, ConfigCommand, CreateCommand, DCProvCommand, DcProv, DcProvError,
+    PrintType, UpdateCommand, UpdateType,
 };
 
 use clap::Parser;
@@ -37,44 +37,50 @@ async fn main() {
         }
 
         DCProvCommand::Config { url, cmd } => {
-            let entry = Entry::new(SERVICE_NAME, &url).map_err(|_| DcProvError::CredentialStorageFailed);
+            let entry =
+                Entry::new(SERVICE_NAME, &url).map_err(|_| DcProvError::CredentialStorageFailed);
             if let Err(ref e) = entry {
                 handle_errors(e)
             }
 
             let entry = entry.unwrap();
             match cmd {
-            ConfigCommand::Set { token } => match credentials::set_dracoon_env(&entry, &token) {
-                Ok(_) => println!("{}{}{}", "Success ".green(), "Credentials saved for ", url),
-                Err(ref e) => handle_errors(e),
-            },
-            ConfigCommand::Get => match credentials::get_dracoon_env(&entry) {
-                Ok(token) => println!(
-                    "{}{}{}{}{}",
-                    "Success ".green(),
-                    "Credentials for ",
-                    url,
-                    ": ",
-                    token
-                ),
-                Err(e) => println!(
-                    "{} {}{}\n{:?}",
-                    "Error".white().on_red(),
-                    "Could not get credentials – account not found for ",
-                    url,
-                    e
-                ),
-            },
-            ConfigCommand::Delete => match credentials::delete_dracoon_env(&entry) {
-                Ok(_) => println!(
-                    "{}{}{}",
-                    "Success ".green(),
-                    "Credentials deleted for ",
-                    url
-                ),
-                Err(ref e) => handle_errors(e),
-            },
-        }},
+                ConfigCommand::Set { token } => {
+                    match credentials::set_dracoon_env(&entry, &token) {
+                        Ok(_) => {
+                            println!("{}{}{}", "Success ".green(), "Credentials saved for ", url)
+                        }
+                        Err(ref e) => handle_errors(e),
+                    }
+                }
+                ConfigCommand::Get => match credentials::get_dracoon_env(&entry) {
+                    Ok(token) => println!(
+                        "{}{}{}{}{}",
+                        "Success ".green(),
+                        "Credentials for ",
+                        url,
+                        ": ",
+                        token
+                    ),
+                    Err(e) => println!(
+                        "{} {}{}\n{:?}",
+                        "Error".white().on_red(),
+                        "Could not get credentials – account not found for ",
+                        url,
+                        e
+                    ),
+                },
+                ConfigCommand::Delete => match credentials::delete_dracoon_env(&entry) {
+                    Ok(_) => println!(
+                        "{}{}{}",
+                        "Success ".green(),
+                        "Credentials deleted for ",
+                        url
+                    ),
+                    Err(ref e) => handle_errors(e),
+                },
+            }
+        }
 
         DCProvCommand::Create { url, cmd } => {
             let provider = cmd::init_provisioning(&url, opt.token).await;
