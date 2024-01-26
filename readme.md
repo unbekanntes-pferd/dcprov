@@ -22,6 +22,7 @@ The provisioning API allows to create customers within a tenant.
 ## How does it work?
 
 To get going, either get a compiled binary for your OS or compile it from source.
+
 1. Compiled binaries:
 
 [dcprov releases](https://github.com/unbekanntes-pferd/dcprov/releases)
@@ -33,6 +34,10 @@ To compile from source, git clone this repo and run
 cargo build --release
 ```
 You need to install Rust in order to build dcprov.
+
+### Installation
+There's no installation - just move the binary into your standard path for binaries e.g. `/usr/local/bin` or add the 
+path where you have the binary to Path (e.g. Windows).
 
 ### Basic commands
 
