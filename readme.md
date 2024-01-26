@@ -63,6 +63,13 @@ If no token has been stored, the tool will provide a prompt to store credentials
 * MacOS: Keychain
 * Linux: lib-secret (needs to be installed!)
 
+If you use a system that does not allow storage (e.g. headless Linux), you can pass the token via parameter:
+
+```bash
+# can be any command
+dcprov list https://dracoon.team --token $yourSecretToken
+```
+
 You can pass any API parameters like
 - offset
 - limit
@@ -73,19 +80,24 @@ To do so, use either the short or long version, example for a filter:
 
 ```bash
 # short version for filter 
-./dcprov list https://dracoon.team -f companyName:cn:DRACOON
+dcprov list https://dracoon.team -f companyName:cn:DRACOON
 ```
 
 ```bash
 # long version for sort (sorts by company name in alphabetical order)
-./dcprov list https://dracoon.team --sort companyName:asc
+dcprov list https://dracoon.team --sort companyName:asc
 ```
 By default, the output is "pretty printed" to stdout.
 If required, the output can be formatted as CSV by passing the csv flag:
 
 ```bash
 # example exporting the output in csv format to a file
-./dcprov list https://dracoon.team --csv > ./customers.csv
+dcprov list https://dracoon.team --csv > ./customers.csv
+
+If you need all customers at once, use the the all flag:
+
+dcprov list https://dracoon.team --all --csv > ./customers.csv
+
 ```
 
 #### Get a single customer
@@ -93,7 +105,7 @@ If required, the output can be formatted as CSV by passing the csv flag:
 To list the info of a single customer, use the get command with the corresponding id:
 
 ```bash
-./dcprov get https://dracoon.team 999
+dcprov get https://dracoon.team 999
 ```
 
 If you don't know the id, search for the id with the list command and filter e.g. via company name (see example above for filter).
@@ -107,13 +119,13 @@ To create a new customer, there are two supported ways:
 To create a customer from a file, use the following command:
 
 ```bash
-./dcprov create https://dracoon.team from-file ./test.json
+dcprov create https://dracoon.team from-file ./test.json
 ```
 
 To create a customer from the prompt, use the following command:
 
 ```bash
-./dcprov create https://dracoon.team prompt
+dcprov create https://dracoon.team prompt
 ```
 
 #### Update a customer
@@ -126,18 +138,18 @@ To update a customer, specify the supported update command (command in parenthes
 Use the following command to update (example updating user max to 1000):
 
 ```bash
-./dcprov update https://dracoon.team 999 user-max 1000
+dcprov update https://dracoon.team 999 user-max 1000
 ```
 
 Example to update quota max (in bytes!):
 ```bash
-./dcprov update https://dracoon.team 999 quota-max 1000000000
+dcprov update https://dracoon.team 999 quota-max 1000000000
 ```
 
 Example to update the company name:
 
 ```bash
-./dcprov update https://dracoon.team 999 company-name "DRACOON TEST"
+dcprov update https://dracoon.team 999 company-name "DRACOON TEST"
 ```
 
 #### Delete a single customer
@@ -145,7 +157,7 @@ Example to update the company name:
 To delete a single customer, provide the id with the following command:
 
 ```bash
-./dcprov delete https://dracoon.team 999 
+dcprov delete https://dracoon.team 999 
 ```
 
 #### Configure the token 
@@ -156,7 +168,7 @@ In order to perform any requests, you will need to enter the X-SDS-Service-Token
 To store a token, use the set command:
 
 ```bash
-./dcprov config https://dracoon.team set your-very-secret-token
+dcprov config https://dracoon.team set your-very-secret-token
 ```
 The token will be stored securely based on your OS (keytar bindings).
 
@@ -164,7 +176,7 @@ The token will be stored securely based on your OS (keytar bindings).
 To print a token to screen, use the get command:
 
 ```bash
-./dcprov config https://dracoon.team get
+dcprov config https://dracoon.team get
 ```
 The token will be fetched from the secure storage and printed to screen – the command can be used as well to check, if a token is stored for a given domain.
 
@@ -172,7 +184,7 @@ The token will be fetched from the secure storage and printed to screen – the 
 To delete, use the delete command:
 
 ```bash
-./dcprov config https://dracoon.team delete
+dcprov config https://dracoon.team delete
 ```
 The token will be removed from the secure storage.
 
@@ -185,12 +197,12 @@ generated for the user list.
 Example filtering for a specific user with a login "dracoonhero":
 
 ```bash
-./dcprov get-users https://dracoon.team 999 --filter userName:cn:dracoonhero
+dcprov get-users https://dracoon.team 999 --filter userName:cn:dracoonhero
 ```
 
 Example storing the user list in a CSV:
 ```bash
-./dcprov get-users https://dracoon.team 999 --csv > customer_999_users.csv
+dcprov get-users https://dracoon.team 999 --csv > customer_999_users.csv
 ```
 
 #### Getting customer attributes
@@ -200,12 +212,12 @@ You can also list all customer attributes with the get-attributes command.
 Example filtering for a specific key with name "dracoon_id":
 
 ```bash
-./dcprov get-attributes https://dracoon.team 999 --filter key:eq:dracoon_id
+dcprov get-attributes https://dracoon.team 999 --filter key:eq:dracoon_id
 ```
 
 Example storing the attributes list in a CSV:
 ```bash
-./dcprov get-attributes https://dracoon.team 999 --csv > customer_999_attribs.csv
+dcprov get-attributes https://dracoon.team 999 --csv > customer_999_attribs.csv
 ```
 
 #### Setting customer attributes
@@ -215,7 +227,7 @@ You can set multiple attributes with the set-attributes command.
 Example setting multiple key-value pairs (-a required for each attribute!):
 
 ```bash
-./dcprov set-attributes https://dracoon.team 999 --csv -a key1=value1 -a key2=value2 -a key3=value3
+dcprov set-attributes https://dracoon.team 999 --csv -a key1=value1 -a key2=value2 -a key3=value3
 ```
 
 
