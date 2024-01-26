@@ -6,7 +6,7 @@ use dco3::{
         Customer, CustomerAttributes, FirstAdminUser, NewCustomerRequest as NewCustomerRequestDco3,
         UpdateCustomerRequest,
     },
-    users::{UserItem, UserAuthData, AuthMethod},
+    users::{AuthMethod, UserAuthData, UserItem},
     CustomerProvisioning, Dracoon, DracoonClientError, KeyValueEntry, ListAllParams,
 };
 use keyring::Entry;
@@ -20,9 +20,7 @@ pub use {models::*, utils::parse_key_val};
 const CUSTOMER_CSV_HEADER: &str =
     "companyName,contractType,userUsed,userMax,quotaUsed,quotaMax,id,createdAt";
 
-// header for CSV output (list customer users)
-const CUSTOMER_USERS_CSV_HEADER: &str = "id,firstName,lastName,userName,isLocked";
-
+const CUSTOMER_USERS_CSV_HEADER: &str = "id,firstName,lastName,userName,isLocked,lastLoginAt";
 const CUSTOMER_ATTRIBUTES_CSV_HEADER: &str = "key,value";
 
 // supported update types
@@ -156,7 +154,12 @@ fn user_to_string(user: UserItem, print_type: PrintType) -> String {
         PrintType::Csv => {
             let user_line = format!(
                 "{},{},{},{},{},{}",
-                user.id, user.first_name, user.last_name, user.user_name, user.is_locked, user.last_login_success_at.unwrap_or("N/A".into())
+                user.id,
+                user.first_name,
+                user.last_name,
+                user.user_name,
+                user.is_locked,
+                user.last_login_success_at.unwrap_or("N/A".into())
             );
             user_line
         }
@@ -429,7 +432,9 @@ pub fn prompt_new_customer() -> Result<NewCustomerRequestDco3, DcProvError> {
     let user_name = user_name.unwrap_or(email.clone());
 
     // TODO: remove manual build once dco3 fixes bug with must_change_password
-    let auth_data = UserAuthData::builder(AuthMethod::Basic).with_must_change_password(true).build();
+    let auth_data = UserAuthData::builder(AuthMethod::Basic)
+        .with_must_change_password(true)
+        .build();
 
     let first_admin_user = FirstAdminUser {
         first_name,
@@ -439,7 +444,7 @@ pub fn prompt_new_customer() -> Result<NewCustomerRequestDco3, DcProvError> {
         auth_data: Some(auth_data),
         notify_user: Some(true),
         receiver_language: None,
-        phone: None
+        phone: None,
     };
 
     Ok(

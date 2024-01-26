@@ -1,9 +1,8 @@
 use crate::cmd::DcProvError;
 use keyring::Entry;
 
-// service name to store 
+// service name to store
 pub const SERVICE_NAME: &str = env!("CARGO_PKG_NAME");
-
 
 pub fn set_dracoon_env(entry: &Entry, secret: &str) -> Result<(), DcProvError> {
     match entry.set_password(secret) {
@@ -29,4 +28,3 @@ pub fn delete_dracoon_env(entry: &Entry) -> Result<(), DcProvError> {
         Err(_) => Err(DcProvError::CredentialDeletionFailed),
     }
 }
-
