@@ -155,15 +155,15 @@ fn user_to_string(user: UserItem, print_type: PrintType) -> String {
     match print_type {
         PrintType::Csv => {
             let user_line = format!(
-                "{},{},{},{},{}",
-                user.id, user.first_name, user.last_name, user.user_name, user.is_locked
+                "{},{},{},{},{},{}",
+                user.id, user.first_name, user.last_name, user.user_name, user.is_locked, user.last_login_success_at.unwrap_or("N/A".into())
             );
             user_line
         }
         PrintType::Pretty => {
             let user_line = format!(
-                "id: {} | first name: {} | last name: {} | user name: {} | is locked: {}",
-                user.id, user.first_name, user.last_name, user.user_name, user.is_locked
+                "id: {} | first name: {} | last name: {} | user name: {} | is locked: {} | last login: {}",
+                user.id, user.first_name, user.last_name, user.user_name, user.is_locked, user.last_login_success_at.unwrap_or("N/A".into())
             );
             user_line
         }
