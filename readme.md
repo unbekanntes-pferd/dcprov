@@ -55,7 +55,7 @@ The tool is fairly simple to use via commandline and comes with the following co
 Example usage in Linux / MacOS:
 
 ```bash
-./dcprov list https://dracoon.team 
+dcprov list https://dracoon.team 
 ```
 Example usage in Windows:
 ```bash
