@@ -193,10 +193,11 @@ pub async fn list_customers(
     offset: Option<u64>,
     limit: Option<u64>,
     print_type: Option<PrintType>,
+    all: bool,
 ) {
     let print_type = print_type.unwrap_or(PrintType::Pretty);
 
-    let params = build_params(filter, sort, offset, limit);
+    let params = build_params(filter.clone(), sort.clone(), offset, limit);
 
     let customers = provider.get_customers(Some(params)).await;
 
@@ -205,7 +206,7 @@ pub async fn list_customers(
         std::process::exit(1)
     };
 
-    let customers = customers.unwrap();
+    let mut customers = customers.unwrap();
 
     match print_type {
         PrintType::Csv => {
@@ -218,6 +219,23 @@ pub async fn list_customers(
             );
         }
     };
+
+    if all {
+        for offset in 500..=customers.range.total {
+            let params = build_params(filter.clone(), sort.clone(), Some(offset), limit);
+
+            let next_customers = provider.get_customers(Some(params)).await;
+
+            if let Err(ref e) = next_customers {
+                handle_dracoon_errors(e, Some("Could not list customers."));
+                std::process::exit(1)
+            };
+
+            let next_customers = next_customers.unwrap();
+
+            customers.items.extend(next_customers.items);
+        }
+    }
 
     for customer in customers.items {
         let cus_line = customer_to_string(customer, print_type);
